@@ -1,26 +1,39 @@
 import pandas as pd
 import yfinance as yf
 import os
+import urllib.request
+import re
 
 CSV_FILE = "data/trade_history.csv"
+_NAME_CACHE = {} # 종목명 캐싱용 딕셔너리
 
 def load_trade_history():
     if not os.path.exists(CSV_FILE):
-        return pd.DataFrame(columns=["date", "ticker", "tradeType", "quantity", "price", "currency"])
+        return pd.DataFrame(columns=["date", "account", "ticker", "tradeType", "quantity", "price", "currency"])
     
     df = pd.read_csv(CSV_FILE)
     
+    changed = False
     # 기존 데이터에 currency 컬럼이 없는 경우 추가 (기본값 USD)
     if "currency" not in df.columns:
         df["currency"] = "USD"
+        changed = True
+        
+    # 기존 데이터에 account 컬럼이 없는 경우 추가 (기본값 기본계좌)
+    if "account" not in df.columns:
+        df["account"] = "기본계좌"
+        changed = True
+        
+    if changed:
         df.to_csv(CSV_FILE, index=False)
         
     return df
 
-def add_trade(date, ticker, tradeType, quantity, price, currency="USD"):
+def add_trade(date, account, ticker, tradeType, quantity, price, currency="KRW"):
     df = load_trade_history()
     new_row = pd.DataFrame([{
         "date": date,
+        "account": account,
         "ticker": ticker.upper(),
         "tradeType": tradeType,
         "quantity": float(quantity),
@@ -29,6 +42,20 @@ def add_trade(date, ticker, tradeType, quantity, price, currency="USD"):
     }])
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_csv(CSV_FILE, index=False)
+
+def update_trade(index, date, account, ticker, tradeType, quantity, price, currency):
+    df = load_trade_history()
+    if 0 <= index < len(df):
+        df.loc[index, "date"] = date
+        df.loc[index, "account"] = account
+        df.loc[index, "ticker"] = ticker.upper()
+        df.loc[index, "tradeType"] = tradeType
+        df.loc[index, "quantity"] = float(quantity)
+        df.loc[index, "price"] = float(price)
+        df.loc[index, "currency"] = currency
+        df.to_csv(CSV_FILE, index=False)
+        return True
+    return False
 
 def delete_trade(index):
     df = load_trade_history()
@@ -50,6 +77,47 @@ def get_current_price(ticker):
         print(f"Error fetching price for {ticker}: {e}")
         return 0.0
 
+def get_korean_company_name(ticker):
+    """네이버 금융을 통해 한국 주식의 한글 종목명을 가져옵니다."""
+    try:
+        code = ticker.split('.')[0]
+        url = f"https://finance.naver.com/item/main.naver?code={code}"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            html = response.read().decode('utf-8', errors='ignore')
+            # <title>삼성전자 : Npay 증권</title> 형태에서 이름 추출
+            match = re.search(r'<title>(.*?)\s*:', html)
+            if match:
+                return match.group(1).strip()
+    except Exception as e:
+        print(f"Error fetching Korean name for {ticker}: {e}")
+    return None
+
+def get_company_name(ticker):
+    """종목 코드로 회사 이름을 가져옵니다. (캐싱 적용)"""
+    if ticker in _NAME_CACHE:
+        return _NAME_CACHE[ticker]
+    
+    name = None
+    
+    # 한국 주식인 경우 네이버 금융에서 한글명 조회 시도
+    if ticker.endswith('.KS') or ticker.endswith('.KQ'):
+        name = get_korean_company_name(ticker)
+        
+    # 한글명 조회가 실패했거나 해외 주식인 경우 yfinance 사용
+    if not name:
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info
+            # shortName이 없으면 longName, 둘 다 없으면 ticker 반환
+            name = info.get('shortName') or info.get('longName') or ticker
+        except Exception:
+            # API 호출 실패 시 ticker 자체를 이름으로 사용
+            name = ticker
+            
+    _NAME_CACHE[ticker] = name
+    return name
+
 def get_exchange_rate():
     try:
         # USD/KRW 환율 가져오기
@@ -60,8 +128,15 @@ def get_exchange_rate():
     except:
         return 1300.0
 
-def calculate_portfolio():
+def calculate_portfolio(account_filter=None):
     df = load_trade_history()
+    if df.empty:
+        return pd.DataFrame()
+
+    # 계좌 필터링 적용
+    if account_filter and account_filter != "전체 계좌":
+        df = df[df['account'] == account_filter]
+
     if df.empty:
         return pd.DataFrame()
 
@@ -80,7 +155,8 @@ def calculate_portfolio():
                 "totalCost": 0.0,
                 "averageCost": 0.0,
                 "realizedPnl": 0.0,
-                "currency": currency
+                "currency": currency,
+                "companyName": get_company_name(ticker) # 종목명 추가
             }
 
         # 매수 처리 (한글/영문 모두 지원)
