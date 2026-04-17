@@ -3,7 +3,19 @@ import pandas as pd
 import plotly.express as px
 from datetime import date
 import os
-from utils.portfolio import load_trade_history, add_trade, update_trade, calculate_portfolio, get_exchange_rate, get_current_price, delete_trade, get_company_name
+from utils.portfolio import (
+    load_trade_history,
+    add_trade,
+    update_trade,
+    calculate_portfolio,
+    get_exchange_rate,
+    get_current_price,
+    delete_trade,
+    get_company_name,
+    EXPOSURE_CURRENCY_OPTIONS,
+    ASSET_CLASS_OPTIONS,
+    NEW_TRADE_DEFAULT_ASSET_CLASS,
+)
 
 # 페이지 기본 설정
 st.set_page_config(page_title="주식 포트폴리오 트래커", layout="wide")
@@ -70,6 +82,7 @@ if ticker:
     current_price = get_current_price(ticker)
     st.sidebar.info(f"**{company_name} ({ticker})**\n\n현재가: {current_price:,.0f}") # 현재가도 소수점 버림
 
+trade_form_fx_default = get_exchange_rate()
 with st.sidebar.form("trade_form"):
     trade_date = st.date_input("매매 일자", date.today())
     trade_type = st.selectbox("매매 종류", ["매수", "매도"])
@@ -77,6 +90,29 @@ with st.sidebar.form("trade_form"):
     # 통화 기본값을 target_currency에 맞춤
     currency_idx = 0 if target_currency == "KRW" else 1
     currency = st.selectbox("통화", ["KRW", "USD"], index=currency_idx)
+
+    exposure_default_idx = 1 if currency == "USD" else 0
+    exposure_currency = st.selectbox(
+        "노출통화 (환율 리스크)",
+        list(EXPOSURE_CURRENCY_OPTIONS),
+        index=exposure_default_idx,
+        help="결제 통화와 다를 수 있습니다. 예: 국내 상장 KODEX 나스닥100은 원화로 거래되어도 미국 지수·달러 자산에 노출될 수 있어 노출통화를 USD로 둘 수 있습니다.",
+    )
+    asset_class = st.selectbox(
+        "자산군",
+        list(ASSET_CLASS_OPTIONS),
+        index=list(ASSET_CLASS_OPTIONS).index(NEW_TRADE_DEFAULT_ASSET_CLASS),
+    )
+
+    trade_fx_krw_per_usd = 1.0
+    if currency == "USD":
+        trade_fx_krw_per_usd = st.number_input(
+            "매매 당시 환율 (1 USD = ? KRW)",
+            min_value=0.01,
+            value=float(trade_form_fx_default),
+            step=1.0,
+            help="매수·매도 모두 해당 체결 시점의 USD/KRW 환율을 입력합니다. 실현손익은 매도환율×매도단가×수량 − 장부원화평균단가×수량으로 반영됩니다.",
+        )
     
     # 수량 기본값 1.0으로 설정, 1씩 증가
     quantity = st.number_input("수량", min_value=0.01, value=1.0, step=1.0)
@@ -97,7 +133,18 @@ with st.sidebar.form("trade_form"):
                     os.makedirs("data")
                 
                 # CSV에 추가
-                add_trade(trade_date, account, ticker, trade_type, quantity, price, currency)
+                add_trade(
+                    trade_date,
+                    account,
+                    ticker,
+                    trade_type,
+                    quantity,
+                    price,
+                    currency,
+                    fx_krw_per_usd=trade_fx_krw_per_usd,
+                    exposure_currency=exposure_currency,
+                    asset_class=asset_class,
+                )
                 st.sidebar.success(f"[{account}] {ticker} {quantity}주 {trade_type} 추가 완료!")
                 st.rerun() # 앱 새로고침
         else:
@@ -135,19 +182,25 @@ if not df.empty:
     display_df = df.copy()
     
     if is_krw_mode:
-        # USD 자산을 KRW로 변환
-        usd_mask = display_df['currency'] == 'USD'
-        display_df.loc[usd_mask, 'averageCost'] *= exchange_rate
-        display_df.loc[usd_mask, 'currentPrice'] *= exchange_rate
-        display_df.loc[usd_mask, 'currentValue'] *= exchange_rate
-        display_df.loc[usd_mask, 'unrealizedPnl'] *= exchange_rate
-        display_df.loc[usd_mask, 'realizedPnl'] *= exchange_rate
-        display_df.loc[usd_mask, 'currency'] = 'KRW (환산)'
+        # USD: 단가·평가는 현재 환율로 표시, 장부·손익은 매매 시점 환율 누적(평균원화단가) 반영
+        usd_mask = display_df["currency"] == "USD"
+        display_df.loc[usd_mask, "averageCost"] = display_df.loc[usd_mask, "averageCostKrw"]
+        display_df.loc[usd_mask, "currentPrice"] = display_df.loc[usd_mask, "currentPrice"] * exchange_rate
+        display_df.loc[usd_mask, "currentValue"] = display_df.loc[usd_mask, "currentValueKrw"]
+        display_df.loc[usd_mask, "unrealizedPnl"] = display_df.loc[usd_mask, "unrealizedPnlKrw"]
+        display_df.loc[usd_mask, "realizedPnl"] = display_df.loc[usd_mask, "realizedPnlKrw"]
+        display_df.loc[usd_mask, "returnRate"] = display_df.loc[usd_mask, "returnRateKrw"]
+        display_df.loc[usd_mask, "currency"] = "KRW (환산)"
 
     # 총합 계산
-    total_value = display_df['currentValue'].sum()
-    total_unrealized_pnl = display_df['unrealizedPnl'].sum()
-    total_realized_pnl = display_df['realizedPnl'].sum()
+    if is_krw_mode:
+        total_value = display_df["currentValueKrw"].sum()
+        total_unrealized_pnl = display_df["unrealizedPnlKrw"].sum()
+        total_realized_pnl = display_df["realizedPnlKrw"].sum()
+    else:
+        total_value = display_df["currentValue"].sum()
+        total_unrealized_pnl = display_df["unrealizedPnl"].sum()
+        total_realized_pnl = display_df["realizedPnl"].sum()
 
     # 상단 요약 지표 표시
     col1, col2, col3 = st.columns(3)
@@ -182,8 +235,36 @@ if not df.empty:
             holdings_df['weight'] = (holdings_df['currentValue'] / total_value) * 100
             
             # 화면 표시용 데이터프레임 정리 (companyName 추가)
-            show_df = holdings_df[['ticker', 'companyName', 'currency', 'currentQuantity', 'averageCost', 'currentPrice', 'currentValue', 'unrealizedPnl', 'returnRate', 'weight']]
-            show_df.columns = ['종목코드', '종목명', '통화', '보유수량', '평균단가', '현재가', '평가금액', '평가손익', '수익률(%)', '비중(%)']
+            show_df = holdings_df[
+                [
+                    "ticker",
+                    "companyName",
+                    "currency",
+                    "exposure_currency",
+                    "asset_class",
+                    "currentQuantity",
+                    "averageCost",
+                    "currentPrice",
+                    "currentValue",
+                    "unrealizedPnl",
+                    "returnRate",
+                    "weight",
+                ]
+            ]
+            show_df.columns = [
+                "종목코드",
+                "종목명",
+                "결제통화",
+                "노출통화",
+                "자산군",
+                "보유수량",
+                "평균단가",
+                "현재가",
+                "평가금액",
+                "평가손익",
+                "수익률(%)",
+                "비중(%)",
+            ]
             
             # 포맷팅 설정 (모두 소수점 버림)
             format_dict = {
@@ -203,6 +284,45 @@ if not df.empty:
             # 파이 차트 라벨을 종목명으로 표시
             fig = px.pie(holdings_df, values='currentValue', names='companyName', title='종목별 자산 비중')
             st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown(
+                "<h3 style='font-size: 1.1rem; margin-top: 30px; margin-bottom: 10px;'>속성별 자산 비중</h3>",
+                unsafe_allow_html=True,
+            )
+            st.caption(
+                "평가금액 기준 비중입니다. 원화 환산 모드일 때는 동일 환율로 환산한 금액을 합산합니다."
+            )
+            by_asset = (
+                holdings_df.groupby("asset_class", as_index=False)["currentValue"].sum().query("currentValue > 0")
+            )
+            by_exposure = (
+                holdings_df.groupby("exposure_currency", as_index=False)["currentValue"]
+                .sum()
+                .query("currentValue > 0")
+            )
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                if not by_asset.empty:
+                    fig_a = px.pie(
+                        by_asset,
+                        values="currentValue",
+                        names="asset_class",
+                        title="자산군별 비중",
+                    )
+                    st.plotly_chart(fig_a, use_container_width=True)
+                else:
+                    st.info("자산군별 집계할 평가금액이 없습니다.")
+            with col_p2:
+                if not by_exposure.empty:
+                    fig_e = px.pie(
+                        by_exposure,
+                        values="currentValue",
+                        names="exposure_currency",
+                        title="노출통화별 비중",
+                    )
+                    st.plotly_chart(fig_e, use_container_width=True)
+                else:
+                    st.info("노출통화별 집계할 평가금액이 없습니다.")
         else:
             st.info("현재 보유 중인 주식이 없습니다. 사이드바에서 매수 내역을 추가해보세요!")
 
@@ -215,20 +335,57 @@ if not df.empty:
             # 종목명 컬럼 추가
             current_history_df['종목명'] = current_history_df['ticker'].apply(get_company_name)
             
+            if "fx_krw_per_usd" not in current_history_df.columns:
+                current_history_df["fx_krw_per_usd"] = pd.NA
+                current_history_df.loc[current_history_df["currency"] == "KRW", "fx_krw_per_usd"] = 1.0
+            if "exposure_currency" not in current_history_df.columns:
+                current_history_df["exposure_currency"] = "KRW"
+            if "asset_class" not in current_history_df.columns:
+                current_history_df["asset_class"] = "지수형"
+
             # 명시적으로 컬럼 순서 지정 (데이터프레임의 실제 컬럼 순서가 꼬여있을 수 있으므로)
-            current_history_df = current_history_df[['date', 'account', 'ticker', '종목명', 'tradeType', 'quantity', 'price', 'currency']]
-            
+            current_history_df = current_history_df[
+                [
+                    "date",
+                    "account",
+                    "ticker",
+                    "종목명",
+                    "tradeType",
+                    "quantity",
+                    "price",
+                    "currency",
+                    "fx_krw_per_usd",
+                    "exposure_currency",
+                    "asset_class",
+                ]
+            ]
+
             # 컬럼명 한글화
-            current_history_df.columns = ['매매일자', '계좌명', '종목코드', '종목명', '매매종류', '수량', '단가', '통화']
-            
+            current_history_df.columns = [
+                "매매일자",
+                "계좌명",
+                "종목코드",
+                "종목명",
+                "매매종류",
+                "수량",
+                "단가",
+                "결제통화",
+                "환율(1USD=KRW)",
+                "노출통화",
+                "자산군",
+            ]
+
             # 데이터 타입 명시적 변환 (문자열이 섞여있을 경우 포맷팅 에러 방지)
             current_history_df['수량'] = pd.to_numeric(current_history_df['수량'], errors='coerce').fillna(0)
             current_history_df['단가'] = pd.to_numeric(current_history_df['단가'], errors='coerce').fillna(0)
-            
+            fx_col = "환율(1USD=KRW)"
+            current_history_df[fx_col] = pd.to_numeric(current_history_df[fx_col], errors='coerce')
+
             # 매매 내역 포맷팅 (수량, 단가 소수점 버림)
             history_format_dict = {
                 '수량': '{:,.0f}',
-                '단가': '{:,.0f}'
+                '단가': '{:,.0f}',
+                fx_col: '{:,.2f}',
             }
             
             st.divider()
@@ -259,12 +416,48 @@ if not df.empty:
                         edit_date = st.date_input("매매 일자", pd.to_datetime(row_data['date']), key=f"edit_date_{edit_index}")
                         edit_account = st.text_input("계좌명", row_data['account'], key=f"edit_account_{edit_index}")
                         edit_ticker = st.text_input("종목 코드", row_data['ticker'], key=f"edit_ticker_{edit_index}").upper()
+                        raw_exp = row_data.get("exposure_currency", "KRW")
+                        if raw_exp is None or (isinstance(raw_exp, float) and pd.isna(raw_exp)):
+                            raw_exp = "KRW"
+                        edit_exposure = st.selectbox(
+                            "노출통화",
+                            list(EXPOSURE_CURRENCY_OPTIONS),
+                            index=list(EXPOSURE_CURRENCY_OPTIONS).index(str(raw_exp).upper() if str(raw_exp).upper() in EXPOSURE_CURRENCY_OPTIONS else "KRW"),
+                            key=f"edit_exp_{edit_index}",
+                        )
+                        raw_ac = row_data.get("asset_class", NEW_TRADE_DEFAULT_ASSET_CLASS)
+                        if raw_ac is None or (isinstance(raw_ac, float) and pd.isna(raw_ac)):
+                            raw_ac = NEW_TRADE_DEFAULT_ASSET_CLASS
+                        raw_ac = str(raw_ac).strip()
+                        ac_idx = list(ASSET_CLASS_OPTIONS).index(raw_ac) if raw_ac in ASSET_CLASS_OPTIONS else 0
+                        edit_asset_class = st.selectbox(
+                            "자산군",
+                            list(ASSET_CLASS_OPTIONS),
+                            index=ac_idx,
+                            key=f"edit_ac_{edit_index}",
+                        )
                     with col_e2:
                         edit_type = st.selectbox("매매 종류", ["매수", "매도"], index=0 if row_data['tradeType'] in ['Buy', '매수'] else 1, key=f"edit_type_{edit_index}")
                         edit_quantity = st.number_input("수량", min_value=0.01, value=float(row_data['quantity']), step=1.0, key=f"edit_qty_{edit_index}")
                     with col_e3:
                         edit_price = st.number_input("단가", min_value=0.01, value=float(row_data['price']), step=1.0, key=f"edit_price_{edit_index}")
                         edit_currency = st.selectbox("통화", ["KRW", "USD"], index=0 if row_data['currency'] == 'KRW' else 1, key=f"edit_currency_{edit_index}")
+                        raw_edit_fx = row_data.get("fx_krw_per_usd")
+                        if edit_currency == "USD":
+                            edit_fx_default = (
+                                float(raw_edit_fx)
+                                if raw_edit_fx is not None and not pd.isna(raw_edit_fx)
+                                else float(get_exchange_rate())
+                            )
+                            edit_fx_krw = st.number_input(
+                                "매매 당시 환율 (1 USD = KRW)",
+                                min_value=0.01,
+                                value=edit_fx_default,
+                                step=1.0,
+                                key=f"edit_fx_{edit_index}",
+                            )
+                        else:
+                            edit_fx_krw = 1.0
                     
                     col_btn1, col_btn2 = st.columns([1, 10])
                     with col_btn1:
@@ -273,7 +466,19 @@ if not df.empty:
                             if edit_currency != expected_currency:
                                 st.error(f"🚨 수정 오류: [{edit_account}] 계좌는 {expected_currency} 전용입니다. 통화를 확인해주세요.")
                             else:
-                                if update_trade(edit_index, edit_date, edit_account, edit_ticker, edit_type, edit_quantity, edit_price, edit_currency):
+                                if update_trade(
+                                    edit_index,
+                                    edit_date,
+                                    edit_account,
+                                    edit_ticker,
+                                    edit_type,
+                                    edit_quantity,
+                                    edit_price,
+                                    edit_currency,
+                                    fx_krw_per_usd=edit_fx_krw,
+                                    exposure_currency=edit_exposure,
+                                    asset_class=edit_asset_class,
+                                ):
                                     st.success("성공적으로 수정되었습니다.")
                                     st.rerun()
                     with col_btn2:
