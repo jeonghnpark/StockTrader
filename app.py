@@ -15,6 +15,7 @@ from utils.portfolio import (
     EXPOSURE_CURRENCY_OPTIONS,
     ASSET_CLASS_OPTIONS,
     NEW_TRADE_DEFAULT_ASSET_CLASS,
+    FX_HEDGE_TICKER,
 )
 
 # 페이지 기본 설정
@@ -73,7 +74,10 @@ if ticker_option == "기존 종목 선택":
         st.sidebar.warning("기존 매매 내역이 없습니다. '새 종목 직접 입력'을 선택해주세요.")
 else:
     ticker = st.sidebar.text_input("종목 코드 (예: AAPL, 005930.KS)", "").upper()
-    st.sidebar.caption("한국 주식은 코스피 '.KS', 코스닥 '.KQ'를 붙여주세요. (예: 삼성전자 005930.KS)")
+    st.sidebar.caption(
+        "한국 주식은 코스피 '.KS', 코스닥 '.KQ'를 붙여주세요. "
+        f"달러 헤지·선물 포지션은 **{FX_HEDGE_TICKER}** 로 입력하세요. 단가는 KRW/USD(원화 환율)이며, 매도를 먼저 넣어도 됩니다."
+    )
 
 # 종목이 선택/입력되면 현재가 표시
 current_price = 0.0
@@ -183,7 +187,10 @@ if not df.empty:
     
     if is_krw_mode:
         # USD: 단가·평가는 현재 환율로 표시, 장부·손익은 매매 시점 환율 누적(평균원화단가) 반영
-        usd_mask = display_df["currency"] == "USD"
+        # USDKRW는 단가가 이미 KRW/USD(원)이므로 환율을 한 번 더 곱하지 않음
+        usd_mask = (display_df["currency"] == "USD") & (
+            display_df["ticker"].str.upper() != FX_HEDGE_TICKER
+        )
         display_df.loc[usd_mask, "averageCost"] = display_df.loc[usd_mask, "averageCostKrw"]
         display_df.loc[usd_mask, "currentPrice"] = display_df.loc[usd_mask, "currentPrice"] * exchange_rate
         display_df.loc[usd_mask, "currentValue"] = display_df.loc[usd_mask, "currentValueKrw"]
@@ -191,6 +198,8 @@ if not df.empty:
         display_df.loc[usd_mask, "realizedPnl"] = display_df.loc[usd_mask, "realizedPnlKrw"]
         display_df.loc[usd_mask, "returnRate"] = display_df.loc[usd_mask, "returnRateKrw"]
         display_df.loc[usd_mask, "currency"] = "KRW (환산)"
+        fx_sym_mask = display_df["ticker"].str.upper() == FX_HEDGE_TICKER
+        display_df.loc[fx_sym_mask, "currency"] = "KRW (USDKRW)"
 
     # 총합 계산
     if is_krw_mode:
@@ -227,8 +236,8 @@ if not df.empty:
     with tab1:
         st.markdown("<h3 style='font-size: 1.1rem; margin-top: 10px; margin-bottom: 10px;'>현재 보유 종목</h3>", unsafe_allow_html=True)
         
-        # 보유 수량이 0보다 큰 종목만 표시
-        holdings_df = display_df[display_df['currentQuantity'] > 0].copy()
+        # 보유 수량이 0이 아닌 종목 (공매도·USDKRW 숏 포함)
+        holdings_df = display_df[display_df["currentQuantity"] != 0].copy()
         
         if not holdings_df.empty:
             # 비중 계산
@@ -247,6 +256,7 @@ if not df.empty:
                     "currentPrice",
                     "currentValue",
                     "unrealizedPnl",
+                    "realizedPnl",
                     "returnRate",
                     "weight",
                 ]
@@ -262,6 +272,7 @@ if not df.empty:
                 "현재가",
                 "평가금액",
                 "평가손익",
+                "매매손익",
                 "수익률(%)",
                 "비중(%)",
             ]
@@ -273,58 +284,143 @@ if not df.empty:
                 '현재가': '{:,.0f}',
                 '평가금액': '{:,.0f}',
                 '평가손익': '{:,.0f}',
+                '매매손익': '{:,.0f}',
                 '수익률(%)': '{:,.0f}%',
                 '비중(%)': '{:,.0f}%'
             }
             
             st.dataframe(show_df.style.format(format_dict), use_container_width=True)
             
-            # 파이 차트 (보유 비중)
+            # 파이 차트 (보유 비중) — USDKRW는 평가 0·비중 제외이므로 차트에서도 제외
             st.markdown("<h3 style='font-size: 1.1rem; margin-top: 30px; margin-bottom: 10px;'>포트폴리오 자산 비중</h3>", unsafe_allow_html=True)
-            # 파이 차트 라벨을 종목명으로 표시
-            fig = px.pie(holdings_df, values='currentValue', names='companyName', title='종목별 자산 비중')
-            st.plotly_chart(fig, use_container_width=True)
+            pie_base = holdings_df[holdings_df["ticker"].str.upper() != FX_HEDGE_TICKER]
+            if pie_base.empty:
+                st.caption("표시할 일반 보유 자산이 없습니다. (USDKRW 헤지는 자산 비중 차트에 포함하지 않습니다.)")
+            else:
+                pie_hold = pie_base.assign(
+                    _pie_slice=pie_base["currentValue"].abs(),
+                )
+                fig = px.pie(
+                    pie_hold,
+                    values="_pie_slice",
+                    names="companyName",
+                    title="종목별 자산 비중 (평가액 절대값 기준 조각)",
+                    custom_data=["currentValueKrw"],
+                )
+                fig.update_traces(
+                    texttemplate="<b>%{label}</b><br>₩%{customdata[0]:,.0f}<br>%{percent}",
+                    textinfo="text",
+                    textposition="inside",
+                    insidetextorientation="horizontal",
+                    hoverinfo="skip",
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
             st.markdown(
                 "<h3 style='font-size: 1.1rem; margin-top: 30px; margin-bottom: 10px;'>속성별 자산 비중</h3>",
                 unsafe_allow_html=True,
             )
             st.caption(
-                "평가금액 기준 비중입니다. 원화 환산 모드일 때는 동일 환율로 환산한 금액을 합산합니다."
+                "조각 크기·비중은 그룹별 순평가액의 절대값 합으로 표시합니다. 표의 평가액(원)은 부호 있는 순액입니다."
             )
-            by_asset = (
-                holdings_df.groupby("asset_class", as_index=False)["currentValue"].sum().query("currentValue > 0")
-            )
-            by_exposure = (
-                holdings_df.groupby("exposure_currency", as_index=False)["currentValue"]
-                .sum()
-                .query("currentValue > 0")
-            )
+            by_asset = holdings_df.groupby("asset_class", as_index=False)["currentValueKrw"].sum()
+            by_asset = by_asset.rename(columns={"currentValueKrw": "평가액_원"})
+            by_asset["_slice"] = by_asset["평가액_원"].abs()
+            by_asset = by_asset[by_asset["_slice"] > 1e-9]
+            denom_a = float(by_asset["_slice"].sum())
+            by_asset["비중(%)"] = by_asset["_slice"] / denom_a * 100 if denom_a > 0 else 0.0
+
+            by_exposure = holdings_df.groupby("exposure_currency", as_index=False)["currentValueKrw"].sum()
+            by_exposure = by_exposure.rename(columns={"currentValueKrw": "평가액_원"})
+            by_exposure["_slice"] = by_exposure["평가액_원"].abs()
+            by_exposure = by_exposure[by_exposure["_slice"] > 1e-9]
+            denom_e = float(by_exposure["_slice"].sum())
+            by_exposure["비중(%)"] = by_exposure["_slice"] / denom_e * 100 if denom_e > 0 else 0.0
+
             col_p1, col_p2 = st.columns(2)
             with col_p1:
                 if not by_asset.empty:
                     fig_a = px.pie(
                         by_asset,
-                        values="currentValue",
+                        values="_slice",
                         names="asset_class",
-                        title="자산군별 비중",
+                        title="자산군별 비중 (원화)",
+                        custom_data=["평가액_원"],
+                    )
+                    fig_a.update_traces(
+                        texttemplate="<b>%{label}</b><br>₩%{customdata[0]:,.0f}<br>%{percent}",
+                        textinfo="text",
+                        textposition="inside",
+                        insidetextorientation="horizontal",
+                        hoverinfo="skip",
                     )
                     st.plotly_chart(fig_a, use_container_width=True)
+                    show_a = by_asset[["asset_class", "평가액_원", "비중(%)"]].copy()
+                    show_a.columns = ["자산군", "평가액(원)", "비중(%)"]
+                    st.dataframe(
+                        show_a.style.format({"평가액(원)": "{:,.0f}", "비중(%)": "{:,.1f}%"}),
+                        use_container_width=True,
+                    )
                 else:
                     st.info("자산군별 집계할 평가금액이 없습니다.")
             with col_p2:
                 if not by_exposure.empty:
                     fig_e = px.pie(
                         by_exposure,
-                        values="currentValue",
+                        values="_slice",
                         names="exposure_currency",
-                        title="노출통화별 비중",
+                        title="노출통화별 비중 (원화)",
+                        custom_data=["평가액_원"],
+                    )
+                    fig_e.update_traces(
+                        texttemplate="<b>%{label}</b><br>₩%{customdata[0]:,.0f}<br>%{percent}",
+                        textinfo="text",
+                        textposition="inside",
+                        insidetextorientation="horizontal",
+                        hoverinfo="skip",
                     )
                     st.plotly_chart(fig_e, use_container_width=True)
+                    show_e = by_exposure[["exposure_currency", "평가액_원", "비중(%)"]].copy()
+                    show_e.columns = ["노출통화", "평가액(원)", "비중(%)"]
+                    st.dataframe(
+                        show_e.style.format({"평가액(원)": "{:,.0f}", "비중(%)": "{:,.1f}%"}),
+                        use_container_width=True,
+                    )
                 else:
                     st.info("노출통화별 집계할 평가금액이 없습니다.")
         else:
             st.info("현재 보유 중인 주식이 없습니다. 사이드바에서 매수 내역을 추가해보세요!")
+
+        st.divider()
+        st.markdown(
+            "<h3 style='font-size: 1.1rem; margin-top: 10px; margin-bottom: 10px;'>"
+            "달러 노출 vs USDKRW (원화)</h3>",
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            f"**달러 노출 자산**: 노출통화가 USD인 종목(USDKRW 제외)의 원화 환산 평가액 합. "
+            f"**USDKRW 평가**: 보유수량 × 현재 환율(1 USD = {exchange_rate:,.2f} KRW). "
+            "숏은 음수. **넷 노출금액** = 위 둘의 합(원화 기준 근사)."
+        )
+        _mask_usd_exposure = (df["ticker"].str.upper() != FX_HEDGE_TICKER) & (
+            df["exposure_currency"] == "USD"
+        )
+        _usd_exposure_krw = float(df.loc[_mask_usd_exposure, "currentValueKrw"].sum())
+        _usdkrw_part = df[df["ticker"].str.upper() == FX_HEDGE_TICKER]
+        _usdkrw_krw = (
+            float((_usdkrw_part["currentQuantity"] * exchange_rate).sum())
+            if not _usdkrw_part.empty
+            else 0.0
+        )
+        _net_exposure_krw = _usd_exposure_krw + _usdkrw_krw
+
+        if abs(_usd_exposure_krw) > 1e-6 or abs(_usdkrw_krw) > 1e-6:
+            _m1, _m2, _m3 = st.columns(3)
+            _m1.metric("달러 노출 자산(원)", f"₩{_usd_exposure_krw:,.0f}")
+            _m2.metric("USDKRW 평가(원)", f"₩{_usdkrw_krw:,.0f}")
+            _m3.metric("넷 노출금액(원)", f"₩{_net_exposure_krw:,.0f}")
+        else:
+            st.caption("표시할 달러 노출 자산 또는 USDKRW 포지션이 없습니다.")
 
     with tab2:
         st.markdown("<h3 style='font-size: 1.1rem; margin-top: 10px; margin-bottom: 10px;'>전체 매매 내역</h3>", unsafe_allow_html=True)
