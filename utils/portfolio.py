@@ -1,11 +1,19 @@
+import logging
+import os
+import time
+
 import pandas as pd
 import yfinance as yf
-import os
-import urllib.request
-import re
+
+from utils import ls_t1101
 
 CSV_FILE = "data/trade_history.csv"
-_NAME_CACHE = {} # 종목명 캐싱용 딕셔너리
+_NAME_CACHE = {}  # 종목명 캐싱용 딕셔너리
+# LS t1101 응답 캐시 (동일 종목 연속 조회·Streamlit 재실행 시 과도한 API 방지)
+_LS_T1101_CACHE = {}  # shcode -> (monotonic_ts, outblock dict | None)
+_LS_T1101_CACHE_TTL_SEC = 60.0
+
+logger = logging.getLogger(__name__)
 
 # 노출통화: 환율(USD/KRW) 리스크 기준 — 거래 결제 통화(currency)와 별개
 EXPOSURE_CURRENCY_OPTIONS = ("KRW", "USD")
@@ -208,38 +216,67 @@ def delete_trade(index):
         return True
     return False
 
+
+def _ls_shcode_from_ticker(ticker):
+    """
+    LS증권 6자리 종목코드. 코스피/코스닥은 005930.KS / 005930.KQ 또는 005930 형식 지원.
+    해외·기타 티커는 None.
+    """
+    t = str(ticker).strip().upper()
+    if t.endswith(".KS") or t.endswith(".KQ"):
+        code = t.split(".")[0]
+        if code.isdigit() and len(code) <= 6:
+            return code.zfill(6)
+        return None
+    if t.isdigit() and 1 <= len(t) <= 6:
+        return t.zfill(6)
+    return None
+
+
+def _ls_price_to_float(outblock):
+    if not outblock:
+        return 0.0
+    p = outblock.get("price")
+    if p is None or p == "":
+        return 0.0
+    try:
+        return float(str(p).replace(",", "").strip())
+    except ValueError:
+        return 0.0
+
+
+def _get_ls_t1101_cached(shcode):
+    """t1101 호출 결과 캐시(짧은 TTL). 가격·종목명 조회를 한 번으로 묶기 위함."""
+    now = time.monotonic()
+    if shcode in _LS_T1101_CACHE:
+        ts, data = _LS_T1101_CACHE[shcode]
+        if now - ts < _LS_T1101_CACHE_TTL_SEC:
+            return data
+    data = ls_t1101.get_current(shcode)
+    _LS_T1101_CACHE[shcode] = (now, data)
+    return data
+
+
 def get_current_price(ticker):
     if str(ticker).strip().upper() == FX_HEDGE_TICKER:
         return get_exchange_rate()
+    shcode = _ls_shcode_from_ticker(ticker)
+    if shcode:
+        ob = _get_ls_t1101_cached(shcode)
+        return _ls_price_to_float(ob)
     try:
         stock = yf.Ticker(ticker)
-        # Fast way to get current price
-        todays_data = stock.history(period='1d')
+        todays_data = stock.history(period="1d")
         if not todays_data.empty:
-            return todays_data['Close'].iloc[0]
+            return float(todays_data["Close"].iloc[0])
         return 0.0
     except Exception as e:
-        print(f"Error fetching price for {ticker}: {e}")
+        logger.warning("Error fetching price for %s: %s", ticker, e)
         return 0.0
 
-def get_korean_company_name(ticker):
-    """네이버 금융을 통해 한국 주식의 한글 종목명을 가져옵니다."""
-    try:
-        code = ticker.split('.')[0]
-        url = f"https://finance.naver.com/item/main.naver?code={code}"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response:
-            html = response.read().decode('utf-8', errors='ignore')
-            # <title>삼성전자 : Npay 증권</title> 형태에서 이름 추출
-            match = re.search(r'<title>(.*?)\s*:', html)
-            if match:
-                return match.group(1).strip()
-    except Exception as e:
-        print(f"Error fetching Korean name for {ticker}: {e}")
-    return None
 
 def get_company_name(ticker):
-    """종목 코드로 회사 이름을 가져옵니다. (캐싱 적용)"""
+    """종목 코드로 회사 이름. 국내는 LS t1101(hname), 해외는 yfinance info."""
     if str(ticker).strip().upper() == FX_HEDGE_TICKER:
         name = "USD/KRW 헤지(현물환율 기준)"
         _NAME_CACHE[ticker] = name
@@ -247,24 +284,24 @@ def get_company_name(ticker):
 
     if ticker in _NAME_CACHE:
         return _NAME_CACHE[ticker]
-    
-    name = None
-    
-    # 한국 주식인 경우 네이버 금융에서 한글명 조회 시도
-    if ticker.endswith('.KS') or ticker.endswith('.KQ'):
-        name = get_korean_company_name(ticker)
-        
-    # 한글명 조회가 실패했거나 해외 주식인 경우 yfinance 사용
-    if not name:
-        try:
-            stock = yf.Ticker(ticker)
-            info = stock.info
-            # shortName이 없으면 longName, 둘 다 없으면 ticker 반환
-            name = info.get('shortName') or info.get('longName') or ticker
-        except Exception:
-            # API 호출 실패 시 ticker 자체를 이름으로 사용
-            name = ticker
-            
+
+    shcode = _ls_shcode_from_ticker(ticker)
+    if shcode:
+        ob = _get_ls_t1101_cached(shcode)
+        if ob and ob.get("hname"):
+            name = str(ob["hname"]).strip()
+            _NAME_CACHE[ticker] = name
+            return name
+        _NAME_CACHE[ticker] = ticker
+        return ticker
+
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        name = info.get("shortName") or info.get("longName") or ticker
+    except Exception:
+        name = ticker
+
     _NAME_CACHE[ticker] = name
     return name
 
