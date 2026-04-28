@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 APP_FUTURES_KEY_TEST = os.getenv("EBEST-OPEN-API-APP-KEY-FUTURES-TEST")
 APP_FUTURES_SECRET_TEST = os.getenv("EBEST-OPEN-API-SECRET-KEY-FUTURES-TEST")
 
+# 주식전용용
+# APP_FUTURES_KEY_TEST = os.getenv("EBEST-OPEN-API-APP-KEY-TEST")
+# APP_FUTURES_SECRET_TEST = os.getenv("EBEST-OPEN-API-SECRET-KEY-TEST")
+
+# EBEST-OPEN-API-APP-KEY-TEST=PS0af8zqmwco4ntPCnVLY2txiatbP375EdqI
+# EBEST-OPEN-API-SECRET-KEY-TEST=tUGQ3cvnoEaJ3oHigBpLgpI8lKyt6To6
+
 cached_token_futures = None
 token_expiry_futures = None
 
@@ -39,7 +46,9 @@ def get_token_futures():
     response_data = request.json()
 
     if "access_token" not in response_data:
-        logger.error("LS token response: %s status=%s", response_data, request.status_code)
+        logger.error(
+            "LS token response: %s status=%s", response_data, request.status_code
+        )
         raise ValueError(
             f"LS API 응답에 access_token이 없습니다. .env 키를 확인하세요. 응답: {response_data}"
         )

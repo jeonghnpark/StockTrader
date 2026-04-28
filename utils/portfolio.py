@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 # 노출통화: 환율(USD/KRW) 리스크 기준 — 거래 결제 통화(currency)와 별개
 EXPOSURE_CURRENCY_OPTIONS = ("KRW", "USD")
-# 자산군 (향후개발계획 1.2)
-ASSET_CLASS_OPTIONS = ("지수형", "개별주식", "채권형")
+# 자산군 (향후개발계획 1.2) — 통화헤지 추가: USDKRW 거래 등 환헤지 전용
+ASSET_CLASS_OPTIONS = ("지수형", "개별주식", "채권형", "통화헤지")
 # 기존 매매 마이그레이션 시 기본값 (요청사항)
 LEGACY_DEFAULT_EXPOSURE_CURRENCY = "KRW"
 LEGACY_DEFAULT_ASSET_CLASS = "지수형"
@@ -117,7 +117,9 @@ def load_trade_history():
         changed = True
 
     if "exposure_currency" in df.columns and df["exposure_currency"].isna().any():
-        df["exposure_currency"] = df["exposure_currency"].fillna(LEGACY_DEFAULT_EXPOSURE_CURRENCY)
+        df["exposure_currency"] = df["exposure_currency"].fillna(
+            LEGACY_DEFAULT_EXPOSURE_CURRENCY
+        )
         changed = True
     if "asset_class" in df.columns and df["asset_class"].isna().any():
         df["asset_class"] = df["asset_class"].fillna(LEGACY_DEFAULT_ASSET_CLASS)
@@ -208,6 +210,7 @@ def update_trade(
         return True
     return False
 
+
 def delete_trade(index):
     df = load_trade_history()
     if 0 <= index < len(df):
@@ -263,8 +266,10 @@ def get_current_price(ticker):
     shcode = _ls_shcode_from_ticker(ticker)
     if shcode:
         ob = _get_ls_t1101_cached(shcode)
+        # print(f"{shcode} is retrived from LS api")
         return _ls_price_to_float(ob)
     try:
+        print(f"{ticker} is not retrived from LS api")
         stock = yf.Ticker(ticker)
         todays_data = stock.history(period="1d")
         if not todays_data.empty:
@@ -305,15 +310,17 @@ def get_company_name(ticker):
     _NAME_CACHE[ticker] = name
     return name
 
+
 def get_exchange_rate():
     try:
         # USD/KRW 환율 가져오기
-        rate = yf.Ticker("USDKRW=X").history(period='1d')
+        rate = yf.Ticker("USDKRW=X").history(period="1d")
         if not rate.empty:
-            return rate['Close'].iloc[0]
-        return 1300.0 # API 실패 시 임시 기본값
+            return rate["Close"].iloc[0]
+        return 1300.0  # API 실패 시 임시 기본값
     except:
         return 1300.0
+
 
 def calculate_portfolio(account_filter=None):
     df = load_trade_history()
@@ -391,7 +398,9 @@ def calculate_portfolio(account_filter=None):
                 portfolio[ticker]["totalCostKrw"] += quantity * price * fx
                 q = portfolio[ticker]["currentQuantity"]
                 portfolio[ticker]["averageCost"] = portfolio[ticker]["totalCostUsd"] / q
-                portfolio[ticker]["averageCostKrw"] = portfolio[ticker]["totalCostKrw"] / q
+                portfolio[ticker]["averageCostKrw"] = (
+                    portfolio[ticker]["totalCostKrw"] / q
+                )
 
         # 매도 처리 (한글/영문 모두 지원)
         elif tradeType in ["Sell", "매도"]:
@@ -407,8 +416,13 @@ def calculate_portfolio(account_filter=None):
                     portfolio[ticker]["averageCostKrw"] = 0.0
                     portfolio[ticker]["totalCostKrw"] = 0.0
                 else:
-                    portfolio[ticker]["averageCost"] = portfolio[ticker]["totalCostKrw"] / portfolio[ticker]["currentQuantity"]
-                    portfolio[ticker]["averageCostKrw"] = portfolio[ticker]["averageCost"]
+                    portfolio[ticker]["averageCost"] = (
+                        portfolio[ticker]["totalCostKrw"]
+                        / portfolio[ticker]["currentQuantity"]
+                    )
+                    portfolio[ticker]["averageCostKrw"] = portfolio[ticker][
+                        "averageCost"
+                    ]
             else:
                 avg_usd = portfolio[ticker]["averageCost"]
                 avg_krw = portfolio[ticker]["averageCostKrw"]
@@ -425,8 +439,12 @@ def calculate_portfolio(account_filter=None):
                     portfolio[ticker]["totalCostKrw"] = 0.0
                 else:
                     q = portfolio[ticker]["currentQuantity"]
-                    portfolio[ticker]["averageCost"] = portfolio[ticker]["totalCostUsd"] / q
-                    portfolio[ticker]["averageCostKrw"] = portfolio[ticker]["totalCostKrw"] / q
+                    portfolio[ticker]["averageCost"] = (
+                        portfolio[ticker]["totalCostUsd"] / q
+                    )
+                    portfolio[ticker]["averageCostKrw"] = (
+                        portfolio[ticker]["totalCostKrw"] / q
+                    )
 
     # 보유 수량이 있거나 실현 손익이 있는 종목만 필터링
     active_portfolio = {
@@ -520,6 +538,8 @@ def calculate_portfolio(account_filter=None):
     result_df.loc[_fxh, "returnRate"] = 0.0
     result_df.loc[_fxh, "returnRateKrw"] = 0.0
 
-    result_df = result_df.drop(columns=["totalCostKrw", "totalCostUsd"], errors="ignore")
+    result_df = result_df.drop(
+        columns=["totalCostKrw", "totalCostUsd"], errors="ignore"
+    )
 
     return result_df
