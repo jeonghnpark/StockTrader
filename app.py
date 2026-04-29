@@ -206,32 +206,42 @@ if not df.empty:
         total_value = display_df["currentValueKrw"].sum()
         total_unrealized_pnl = display_df["unrealizedPnlKrw"].sum()
         total_realized_pnl = display_df["realizedPnlKrw"].sum()
+        total_pnl_change = display_df["pnlChangeKrw"].sum()
     else:
         total_value = display_df["currentValue"].sum()
         total_unrealized_pnl = display_df["unrealizedPnl"].sum()
         total_realized_pnl = display_df["realizedPnl"].sum()
+        # 전일 대비는 원화 기준으로만 계산
+        total_pnl_change = df["pnlChangeKrw"].sum()
 
     # 상단 요약 지표 표시
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     def format_currency(val):
         if is_krw_mode:
             return f"₩{val:,.0f}"
-        return f"{val:,.0f}" # 요약 지표도 소수점 버림
+        return f"{val:,.0f}"
 
     col1.metric("총 자산 평가액", format_currency(total_value))
     
     # 총 수익률 계산 (총 평가손익 / 총 투자원금)
     total_cost = total_value - total_unrealized_pnl
     pnl_pct = (total_unrealized_pnl / total_cost * 100) if total_cost > 0 else 0.0
-    col2.metric("총 평가 손익", format_currency(total_unrealized_pnl), f"{pnl_pct:,.0f}%") # 수익률 소수점 버림
+    col2.metric("총 평가 손익", format_currency(total_unrealized_pnl), f"{pnl_pct:,.0f}%")
     
-    col3.metric("총 실현 손익", format_currency(total_realized_pnl))
+    # 총 평가손익(당일)을 총 평가 손익 옆에 배치
+    col3.metric("총 평가손익(당일)", format_currency(total_pnl_change))
+    
+    col4.metric("총 실현 손익", format_currency(total_realized_pnl))
+    
+    # 총 손익
+    total_pnl = total_unrealized_pnl + total_realized_pnl
+    col5.metric("총 손익", format_currency(total_pnl))
 
     st.divider()
 
     # 탭 구성
-    tab1, tab2 = st.tabs(["포트폴리오 요약", "매매 내역 관리"])
+    tab1, tab2, tab3 = st.tabs(["포트폴리오 요약", "거래완료 내역", "매매 내역 관리"])
 
     with tab1:
         st.markdown("<h3 style='font-size: 1.1rem; margin-top: 10px; margin-bottom: 10px;'>현재 보유 종목</h3>", unsafe_allow_html=True)
@@ -248,48 +258,74 @@ if not df.empty:
                 [
                     "ticker",
                     "companyName",
-                    "currency",
                     "exposure_currency",
                     "asset_class",
                     "currentQuantity",
                     "averageCost",
                     "currentPrice",
                     "currentValue",
+                    "previousClosePrice",
+                    "pnlChangeRate",
+                    "pnlChangeKrw",
                     "unrealizedPnl",
-                    "realizedPnl",
                     "returnRate",
+                    "realizedPnl",
                     "weight",
                 ]
             ]
             show_df.columns = [
                 "종목코드",
                 "종목명",
-                "결제통화",
                 "노출통화",
                 "자산군",
                 "보유수량",
                 "평균단가",
                 "현재가",
                 "평가금액",
-                "평가손익",
+                "전일가",
+                "변동률(당일)",
+                "평가손익(당일)",
+                "평가손익(누적)",
+                "누적수익률(%)",
                 "매매손익",
-                "수익률(%)",
                 "비중(%)",
             ]
             
-            # 포맷팅 설정 (모두 소수점 버림)
+            # 포맷팅 설정 (모두 소수점 버림, 변동률(당일)는 소수 첫째자리)
             format_dict = {
                 '보유수량': '{:,.0f}',
                 '평균단가': '{:,.0f}',
                 '현재가': '{:,.0f}',
                 '평가금액': '{:,.0f}',
-                '평가손익': '{:,.0f}',
+                '전일가': '{:,.0f}',
+                '변동률(당일)': '{:,.1f}%',
+                '평가손익(당일)': '{:,.0f}',
+                '평가손익(누적)': '{:,.0f}',
+                '누적수익률(%)': '{:,.0f}%',
                 '매매손익': '{:,.0f}',
-                '수익률(%)': '{:,.0f}%',
                 '비중(%)': '{:,.0f}%'
             }
             
-            st.dataframe(show_df.style.format(format_dict), use_container_width=True)
+            # 음수값을 빨간색으로 표시하는 스타일 함수
+            def highlight_negative(val):
+                if isinstance(val, (int, float)):
+                    if val < 0:
+                        return 'color: red'
+                return ''
+            
+            # 데이터프레임 스타일링 적용
+            styled_df = show_df.style.format(format_dict)
+            
+            # 음수값이 있는 컬럼들에 대해 음수 하이라이팅 적용
+            negative_columns = ['변동률(당일)', '평가손익(당일)', '평가손익(누적)', '누적수익률(%)', '매매손익']
+            for col in negative_columns:
+                if col in show_df.columns:
+                    styled_df = styled_df.applymap(
+                        highlight_negative,
+                        subset=pd.IndexSlice[:, col]
+                    )
+            
+            st.dataframe(styled_df, use_container_width=True)
             
             # 파이 차트 (보유 비중) — USDKRW는 평가 0·비중 제외이므로 차트에서도 제외
             st.markdown("<h3 style='font-size: 1.1rem; margin-top: 30px; margin-bottom: 10px;'>포트폴리오 자산 비중</h3>", unsafe_allow_html=True)
@@ -423,6 +459,68 @@ if not df.empty:
             st.caption("표시할 달러 노출 자산 또는 USDKRW 포지션이 없습니다.")
 
     with tab2:
+        st.markdown("<h3 style='font-size: 1.1rem; margin-top: 10px; margin-bottom: 10px;'>거래완료 내역</h3>", unsafe_allow_html=True)
+        st.caption("현재 거래가 있지만 보유 잔고가 없는 종목 (완전 매도된 종목)의 최종 매매손익")
+        
+        # 거래완료 종목: 실현 손익이 있지만 현재 수량이 0인 종목
+        completed_df = df[(df["realizedPnlKrw"] != 0) & (abs(df["currentQuantity"]) < 1e-12)].copy()
+        
+        if not completed_df.empty:
+            # 원화 환산 모드 적용
+            display_completed = completed_df.copy()
+            if is_krw_mode:
+                usd_mask_c = (display_completed["currency"] == "USD") & (
+                    display_completed["ticker"].str.upper() != FX_HEDGE_TICKER
+                )
+                display_completed.loc[usd_mask_c, "averageCost"] = display_completed.loc[usd_mask_c, "averageCostKrw"]
+                display_completed.loc[usd_mask_c, "currency"] = "KRW (환산)"
+            
+            # 표시용 데이터프레임
+            completed_show = display_completed[
+                [
+                    "ticker",
+                    "companyName",
+                    "currency",
+                    "exposure_currency",
+                    "asset_class",
+                    "averageCost",
+                    "realizedPnlKrw",
+                ]
+            ].copy()
+            
+            completed_show.columns = [
+                "종목코드",
+                "종목명",
+                "통화",
+                "노출통화",
+                "자산군",
+                "평균 매입가",
+                "최종 매매손익",
+            ]
+            
+            completed_format = {
+                '평균 매입가': '{:,.0f}',
+                '최종 매매손익': '{:,.0f}',
+            }
+            
+            # 음수값을 빨간색으로 표시
+            def highlight_negative_completed(val):
+                if isinstance(val, (int, float)):
+                    if val < 0:
+                        return 'color: red'
+                return ''
+            
+            styled_completed = completed_show.style.format(completed_format)
+            styled_completed = styled_completed.applymap(
+                highlight_negative_completed,
+                subset=pd.IndexSlice[:, '최종 매매손익']
+            )
+            
+            st.dataframe(styled_completed, use_container_width=True)
+        else:
+            st.info("거래완료 내역이 없습니다.")
+
+    with tab3:
         st.markdown("<h3 style='font-size: 1.1rem; margin-top: 10px; margin-bottom: 10px;'>전체 매매 내역</h3>", unsafe_allow_html=True)
         # 최신 데이터를 다시 불러옴
         current_history_df = load_trade_history()

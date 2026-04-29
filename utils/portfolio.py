@@ -248,6 +248,19 @@ def _ls_price_to_float(outblock):
         return 0.0
 
 
+def _ls_previous_close_to_float(outblock):
+    """t1101 응답에서 전일 종가(jnilclose) 추출"""
+    if not outblock:
+        return 0.0
+    p = outblock.get("jnilclose")
+    if p is None or p == "":
+        return 0.0
+    try:
+        return float(str(p).replace(",", "").strip())
+    except ValueError:
+        return 0.0
+
+
 def _get_ls_t1101_cached(shcode):
     """t1101 호출 결과 캐시(짧은 TTL). 가격·종목명 조회를 한 번으로 묶기 위함."""
     now = time.monotonic()
@@ -277,6 +290,28 @@ def get_current_price(ticker):
         return 0.0
     except Exception as e:
         logger.warning("Error fetching price for %s: %s", ticker, e)
+        return 0.0
+
+
+def get_previous_close_price(ticker):
+    """전일 종가 반환. USDKRW는 환율 미지원"""
+    if str(ticker).strip().upper() == FX_HEDGE_TICKER:
+        return 0.0  # USDKRW는 전일 가격 정의 불가
+    
+    shcode = _ls_shcode_from_ticker(ticker)
+    if shcode:
+        ob = _get_ls_t1101_cached(shcode)
+        return _ls_previous_close_to_float(ob)
+    
+    # yfinance로 해외주식 전일 종가 조회
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="5d")  # 5일 데이터로 전일자 가져오기
+        if len(hist) >= 2:
+            return float(hist["Close"].iloc[-2])  # 최신 바로 이전이 전일자
+        return 0.0
+    except Exception as e:
+        logger.warning("Error fetching previous close for %s: %s", ticker, e)
         return 0.0
 
 
@@ -529,6 +564,40 @@ def calculate_portfolio(account_filter=None):
         return float(r["realizedPnlKrw"]) / spot if spot else 0.0
 
     result_df["realizedPnl"] = result_df.apply(row_realized_local, axis=1)
+
+    # 전일 평가손익 계산 (현재 보유 수량 기준)
+    def row_prev_close_price(r):
+        return get_previous_close_price(r["ticker"])
+    
+    result_df["previousClosePrice"] = result_df.apply(row_prev_close_price, axis=1)
+    
+    # 전일 평가손익 (원화 기준) - 현재 보유 수량으로 전일 가격 계산
+    def row_prev_unrealized_krw(r):
+        if abs(r["currentQuantity"]) < 1e-12:
+            return 0.0
+        if is_fx_hedge_ticker(r["ticker"]):
+            return 0.0
+        if r["currency"] == "USD":
+            prev_value_krw = r["previousClosePrice"] * spot
+            return (prev_value_krw - r["averageCostKrw"]) * r["currentQuantity"]
+        else:
+            return (r["previousClosePrice"] - r["averageCost"]) * r["currentQuantity"]
+    
+    result_df["prevUnrealizedPnlKrw"] = result_df.apply(row_prev_unrealized_krw, axis=1)
+    
+    # 전일대비 평가손익 변동 (오늘 - 어제)
+    def row_pnl_change_krw(r):
+        return r["unrealizedPnlKrw"] - r["prevUnrealizedPnlKrw"]
+    
+    result_df["pnlChangeKrw"] = result_df.apply(row_pnl_change_krw, axis=1)
+    
+    # 전일대비 변동률 (%) - 가격 변동률 기준: (현재가 / 전일가 - 1) * 100
+    def row_pnl_change_rate(r):
+        if abs(r["previousClosePrice"]) < 1e-12:
+            return 0.0
+        return ((r["currentPrice"] / r["previousClosePrice"]) - 1.0) * 100
+    
+    result_df["pnlChangeRate"] = result_df.apply(row_pnl_change_rate, axis=1)
 
     # USDKRW(선물·헤지): 평가「금액」만 0으로 두어 총자산·비중·차트에 반영하지 않음.
     # 평가손익은 MTM 그대로, 수익률은 의미 없어 0% 표시.
