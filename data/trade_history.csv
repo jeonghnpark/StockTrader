@@ -43,3 +43,4 @@ date,ticker,tradeType,quantity,price,currency,account,fx_krw_per_usd,exposure_cu
 2026-04-28,009470,매수,50.0,45650.0,KRW,LS(한나),1.0,KRW,개별주식
 2026-04-28,481180.KS,매수,50.0,12335.0,KRW,LS(한나),1.0,KRW,개별주식
 2026-04-28,005380.KS,매수,2.0,555000.0,KRW,LS(한나),1.0,KRW,개별주식
+2026-04-21,481180.KS,매수,80.0,12550.0,KRW,토스(한나),1.0,KRW,개별주식
