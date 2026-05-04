@@ -15,7 +15,6 @@ from utils.portfolio import (
     EXPOSURE_CURRENCY_OPTIONS,
     ASSET_CLASS_OPTIONS,
     NEW_TRADE_DEFAULT_ASSET_CLASS,
-    FX_HEDGE_TICKER,
 )
 from utils.product_master import get_product, add_or_update_product
 
@@ -60,7 +59,7 @@ else:
     ticker = st.sidebar.text_input("종목 코드 (예: AAPL, 005930)", "").upper()
     st.sidebar.caption(
         "한국 주식은 LS증권 6자리 코드(예: 005930). "
-        f"달러 헤지·선물 포지션은 **{FX_HEDGE_TICKER}** 로 입력하세요. 단가는 KRW/USD(원화 환율)이며, 매도를 먼저 넣어도 됩니다."
+        "단가는 KRW/USD(원화 환율)이며, 매도를 먼저 넣어도 됩니다."
     )
 
 # 종목이 선택/입력되면 현재가 표시
@@ -183,9 +182,7 @@ if not df.empty:
     
     # USD: 단가·평가는 현재 환율로 표시, 장부·손익은 매매 시점 환율 누적(평균원화단가) 반영
     # USDKRW는 단가가 이미 KRW/USD(원)이므로 환율을 한 번 더 곱하지 않음
-    usd_mask = (display_df["currency"] == "USD") & (
-        display_df["ticker"].str.upper() != FX_HEDGE_TICKER
-    )
+    usd_mask = (display_df["currency"] == "USD") & (display_df["asset_class"] != "선물")
     display_df.loc[usd_mask, "averageCost"] = display_df.loc[usd_mask, "averageCostKrw"]
     display_df.loc[usd_mask, "currentPrice"] = display_df.loc[usd_mask, "currentPrice"] * exchange_rate
     display_df.loc[usd_mask, "currentValue"] = display_df.loc[usd_mask, "currentValueKrw"]
@@ -193,8 +190,6 @@ if not df.empty:
     display_df.loc[usd_mask, "realizedPnl"] = display_df.loc[usd_mask, "realizedPnlKrw"]
     display_df.loc[usd_mask, "returnRate"] = display_df.loc[usd_mask, "returnRateKrw"]
     display_df.loc[usd_mask, "currency"] = "KRW (환산)"
-    fx_sym_mask = display_df["ticker"].str.upper() == FX_HEDGE_TICKER
-    display_df.loc[fx_sym_mask, "currency"] = "KRW (USDKRW)"
 
     # 총합 계산 - 항상 원화 기준
     total_value = display_df[display_df["asset_class"] != "선물"]["currentValueKrw"].sum()
@@ -322,9 +317,9 @@ if not df.empty:
             
             # 파이 차트 (보유 비중) — USDKRW는 평가 0·비중 제외이므로 차트에서도 제외
             st.markdown("<h3 style='font-size: 1.1rem; margin-top: 30px; margin-bottom: 10px;'>포트폴리오 자산 비중</h3>", unsafe_allow_html=True)
-            pie_base = holdings_df[(holdings_df["ticker"].str.upper() != FX_HEDGE_TICKER) & (holdings_df["asset_class"] != "선물")]
+            pie_base = holdings_df[holdings_df["asset_class"] != "선물"]
             if pie_base.empty:
-                st.caption("표시할 일반 보유 자산이 없습니다. (USDKRW 헤지는 자산 비중 차트에 포함하지 않습니다.)")
+                st.caption("표시할 일반 보유 자산이 없습니다.")
             else:
                 pie_hold = pie_base.assign(
                     _pie_slice=pie_base["currentValue"].abs(),
@@ -427,27 +422,28 @@ if not df.empty:
             unsafe_allow_html=True,
         )
         st.caption(
-            f"**달러 노출 자산**: 노출통화가 USD인 종목(USDKRW 제외)의 원화 환산 평가액 합. "
-            f"**USDKRW 평가**: 보유수량 × 현재 환율(1 USD = {exchange_rate:,.2f} KRW). "
-            "숏은 음수. **넷 노출금액** = 위 둘의 합(원화 기준 근사)."
+            f"**달러 노출 주식**: 노출통화가 USD이고 선물이 아닌 자산의 원화 환산 평가액 합. "
+            f"**달러 노출 선물**: 노출통화가 USD이고 선물인 자산의 수량 × 현재가 × 환율(USD 선물 시) 합. "
+            "숏은 음수. **총 노출금액** = 위 둘의 합."
         )
-        _mask_usd_exposure = (df["ticker"].str.upper() != FX_HEDGE_TICKER) & (
-            df["exposure_currency"] == "USD"
-        )
-        _usd_exposure_krw = float(df.loc[_mask_usd_exposure, "currentValueKrw"].sum())
-        _usdkrw_part = df[df["ticker"].str.upper() == FX_HEDGE_TICKER]
-        _usdkrw_krw = (
-            float((_usdkrw_part["currentQuantity"] * exchange_rate).sum())
-            if not _usdkrw_part.empty
-            else 0.0
-        )
-        _net_exposure_krw = _usd_exposure_krw + _usdkrw_krw
+        _usd_exposure_stocks = df[
+            (df["exposure_currency"] == "USD") & (df["asset_class"] != "선물")
+        ]["currentValueKrw"].sum()
 
-        if abs(_usd_exposure_krw) > 1e-6 or abs(_usdkrw_krw) > 1e-6:
+        _usd_exposure_futures = df[
+            (df["exposure_currency"] == "USD") & (df["asset_class"] == "선물")
+        ].apply(
+            lambda r: r["currentQuantity"] * r["currentPrice"] * (exchange_rate if r["currency"] == "USD" else 1.0),
+            axis=1
+        ).sum()
+
+        _total_exposure_krw = _usd_exposure_stocks + _usd_exposure_futures
+
+        if abs(_usd_exposure_stocks) > 1e-6 or abs(_usd_exposure_futures) > 1e-6:
             _m1, _m2, _m3 = st.columns(3)
-            _m1.metric("달러 노출 자산(원)", f"{_usd_exposure_krw:,.0f}")
-            _m2.metric("USDKRW 평가(원)", f"{_usdkrw_krw:,.0f}")
-            _m3.metric("넷 노출금액(원)", f"{_net_exposure_krw:,.0f}")
+            _m1.metric("달러 노출 주식(원)", f"{_usd_exposure_stocks:,.0f}")
+            _m2.metric("달러 노출 선물(원)", f"{_usd_exposure_futures:,.0f}")
+            _m3.metric("총 노출금액(원)", f"{_total_exposure_krw:,.0f}")
         else:
             st.caption("표시할 달러 노출 자산 또는 USDKRW 포지션이 없습니다.")
 
@@ -461,9 +457,7 @@ if not df.empty:
         if not completed_df.empty:
             # 원화 환산으로 고정
             display_completed = completed_df.copy()
-            usd_mask_c = (display_completed["currency"] == "USD") & (
-                display_completed["ticker"].str.upper() != FX_HEDGE_TICKER
-            )
+            usd_mask_c = (display_completed["currency"] == "USD")
             display_completed.loc[usd_mask_c, "averageCost"] = display_completed.loc[usd_mask_c, "averageCostKrw"]
             display_completed.loc[usd_mask_c, "currency"] = "KRW (환산)"
             

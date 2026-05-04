@@ -212,7 +212,7 @@
         "asset_class": "선물",
         "market": "KRX",
         "settlement_currency": "KRW",
-        "exposure_currency": "KRW",
+        "exposure_currency": "USD",
         "multiplier": 10000.0
     }
 }

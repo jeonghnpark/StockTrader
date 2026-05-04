@@ -18,16 +18,13 @@ logger = logging.getLogger(__name__)
 
 # 노출통화: 환율(USD/KRW) 리스크 기준 — 거래 결제 통화(currency)와 별개
 EXPOSURE_CURRENCY_OPTIONS = ("KRW", "USD")
-# 자산군 (향후개발계획 1.2) — 통화헤지 추가: USDKRW 거래 등 환헤지 전용
-ASSET_CLASS_OPTIONS = ("지수형", "개별주식", "채권형", "통화헤지", "선물")
+# 자산군 (향후개발계획 1.2)
+ASSET_CLASS_OPTIONS = ("지수형", "개별주식", "채권형", "선물")
 # 기존 매매 마이그레이션 시 기본값 (요청사항)
 LEGACY_DEFAULT_EXPOSURE_CURRENCY = "KRW"
 LEGACY_DEFAULT_ASSET_CLASS = "지수형"
 # 신규 매매 입력 시 자산군 기본값
 NEW_TRADE_DEFAULT_ASSET_CLASS = "개별주식"
-
-# yfinance 티커 없이 USD/KRW 현물 환율로 포지션 관리 (달러 선물·헤지 등)
-FX_HEDGE_TICKER = "USDKRW"
 
 
 def _normalize_exposure_currency(val):
@@ -44,8 +41,6 @@ def _normalize_asset_class(val):
     return s if s in ASSET_CLASS_OPTIONS else LEGACY_DEFAULT_ASSET_CLASS
 
 
-def is_fx_hedge_ticker(ticker):
-    return str(ticker).strip().upper() == FX_HEDGE_TICKER
 
 
 def _apply_futures_trade(q_old, cost_basis_krw, dq, price, multiplier=1.0):
@@ -98,30 +93,6 @@ def _is_future_ticker(ticker):
     return (product_info and product_info.get("asset_class") == "선물") or len(ticker_str) == 8
 
 
-def _apply_fx_hedge_trade(q_old, cost_basis_krw, dq, price):
-    """
-    USDKRW: 매수 +dq, 매도 -dq. 단가 = KRW/USD(원화 환율). 실현손익 원화.
-    """
-    realized = 0.0
-    if abs(q_old) < 1e-12:
-        return dq, dq * price, realized
-
-    avg = cost_basis_krw / q_old
-    if q_old * dq > 0:
-        return q_old + dq, cost_basis_krw + dq * price, realized
-
-    c = min(abs(q_old), abs(dq))
-    if q_old > 0:
-        realized += (price - avg) * c
-    else:
-        realized += (avg - price) * c
-
-    q_new = q_old + dq
-    if abs(q_new) < 1e-12:
-        return 0.0, 0.0, realized
-    if (q_new > 0) == (q_old > 0):
-        return q_new, avg * q_new, realized
-    return q_new, q_new * price, realized
 
 
 def load_trade_history():
@@ -342,8 +313,6 @@ def _get_ls_t2101_cached(shcode):
 
 def get_current_price(ticker):
     """현재가 조회. 국내: LS API → .KS 재시도 → 해외(yfinance)"""
-    if str(ticker).strip().upper() == FX_HEDGE_TICKER:
-        return get_exchange_rate()
 
     ticker_str = str(ticker).strip().upper()
     product_info = get_product(ticker_str)
@@ -379,8 +348,6 @@ def get_current_price(ticker):
 
 def get_previous_close_price(ticker):
     """전일 종가 반환. 국내: LS API → .KS 재시도 → 해외(yfinance)"""
-    if str(ticker).strip().upper() == FX_HEDGE_TICKER:
-        return 0.0  # USDKRW는 전일 가격 정의 불가
 
     ticker_str = str(ticker).strip().upper()
     product_info = get_product(ticker_str)
@@ -416,10 +383,6 @@ def get_previous_close_price(ticker):
 
 def get_company_name(ticker):
     """종목 코드로 회사 이름. 국내: LS API → .KS 재시도 → 해외(yfinance) → 코드 반환"""
-    if str(ticker).strip().upper() == FX_HEDGE_TICKER:
-        name = "USD/KRW 헤지(현물환율 기준)"
-        _NAME_CACHE[ticker] = name
-        return name
 
     if ticker in _NAME_CACHE:
         return _NAME_CACHE[ticker]
@@ -514,22 +477,6 @@ def calculate_portfolio(account_filter=None):
             portfolio[ticker]["exposure_currency"] = exp
             portfolio[ticker]["asset_class"] = ac
 
-        if is_fx_hedge_ticker(ticker):
-            dq = quantity if tradeType in ["Buy", "매수"] else -quantity
-            q_old = portfolio[ticker]["currentQuantity"]
-            cost_old = portfolio[ticker]["totalCostKrw"]
-            qn, cn, r = _apply_fx_hedge_trade(q_old, cost_old, dq, price)
-            portfolio[ticker]["currentQuantity"] = qn
-            portfolio[ticker]["totalCostKrw"] = cn
-            portfolio[ticker]["totalCostUsd"] = 0.0
-            portfolio[ticker]["realizedPnlKrw"] += r
-            if abs(qn) > 1e-12:
-                portfolio[ticker]["averageCost"] = cn / qn
-                portfolio[ticker]["averageCostKrw"] = cn / qn
-            else:
-                portfolio[ticker]["averageCost"] = 0.0
-                portfolio[ticker]["averageCostKrw"] = 0.0
-            continue
 
         # 선물 처리 (양방향 포지션 가능)
         if _is_future_ticker(ticker):
@@ -643,8 +590,6 @@ def calculate_portfolio(account_filter=None):
     result_df["currentValue"] = result_df.apply(row_current_value_local, axis=1)
 
     def row_current_value_krw(r):
-        if is_fx_hedge_ticker(r["ticker"]):
-            return r["currentQuantity"] * r["currentPrice"]
         if r["asset_class"] == "선물":
             return 0.0
         if r["currency"] == "USD":
@@ -664,8 +609,6 @@ def calculate_portfolio(account_filter=None):
         if abs(r["currentQuantity"]) < 1e-12:
             return 0.0
 
-        if is_fx_hedge_ticker(r["ticker"]):
-            return r["currentValueKrw"] - r["totalCostKrw"]
 
         if r["asset_class"] == "선물":
             # 선물: 수량이 이미 승수가 반영됨
@@ -694,11 +637,6 @@ def calculate_portfolio(account_filter=None):
             return 0.0
         if r["asset_class"] == "선물":
             return 0.0
-        if is_fx_hedge_ticker(r["ticker"]):
-            base = abs(r["totalCostKrw"])
-            if base < 1e-12:
-                return 0.0
-            return r["unrealizedPnlKrw"] / base * 100
         base = r["totalCostKrw"]
         if base <= 0:
             return 0.0
@@ -708,7 +646,7 @@ def calculate_portfolio(account_filter=None):
 
     # 원래 통화 모드용 실현손익: KRW 종목은 원화, USD 종목은 대략적인 USD(현재 환율로 환산)
     def row_realized_local(r):
-        if r["currency"] == "KRW" or is_fx_hedge_ticker(r["ticker"]):
+        if r["currency"] == "KRW":
             return float(r["realizedPnlKrw"])
         return float(r["realizedPnlKrw"]) / spot if spot else 0.0
 
@@ -723,8 +661,6 @@ def calculate_portfolio(account_filter=None):
     # 전일 평가손익 (원화 기준) - 현재 보유 수량으로 전일 가격 계산
     def row_prev_unrealized_krw(r):
         if abs(r["currentQuantity"]) < 1e-12:
-            return 0.0
-        if is_fx_hedge_ticker(r["ticker"]):
             return 0.0
 
         if r["asset_class"] == "선물":
@@ -755,11 +691,6 @@ def calculate_portfolio(account_filter=None):
 
     # USDKRW(선물·헤지): 평가「금액」만 0으로 두어 총자산·비중·차트에 반영하지 않음.
     # 평가손익은 MTM 그대로, 수익률은 의미 없어 0% 표시.
-    _fxh = result_df["ticker"].str.upper() == FX_HEDGE_TICKER
-    result_df.loc[_fxh, "currentValue"] = 0.0
-    result_df.loc[_fxh, "currentValueKrw"] = 0.0
-    result_df.loc[_fxh, "returnRate"] = 0.0
-    result_df.loc[_fxh, "returnRateKrw"] = 0.0
     
     # 선물 포지션도 평가「금액」만 0으로 (명목 가치를 자산에서 제외)
     _futures = result_df["asset_class"] == "선물"
