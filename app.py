@@ -17,6 +17,7 @@ from utils.portfolio import (
     NEW_TRADE_DEFAULT_ASSET_CLASS,
     FX_HEDGE_TICKER,
 )
+from utils.product_master import get_product, add_or_update_product
 
 # 페이지 기본 설정
 st.set_page_config(page_title="주식 포트폴리오 트래커", layout="wide")
@@ -81,10 +82,12 @@ else:
 
 # 종목이 선택/입력되면 현재가 표시
 current_price = 0.0
+product_info = None
 if ticker:
     company_name = get_company_name(ticker)
     current_price = get_current_price(ticker)
     st.sidebar.info(f"**{company_name} ({ticker})**\n\n현재가: {current_price:,.0f}") # 현재가도 소수점 버림
+    product_info = get_product(ticker)
 
 trade_form_fx_default = get_exchange_rate()
 with st.sidebar.form("trade_form"):
@@ -93,20 +96,34 @@ with st.sidebar.form("trade_form"):
     
     # 통화 기본값을 target_currency에 맞춤
     currency_idx = 0 if target_currency == "KRW" else 1
-    currency = st.selectbox("통화", ["KRW", "USD"], index=currency_idx)
+    if product_info and product_info.get("settlement_currency"):
+        currency_idx = 0 if product_info["settlement_currency"] == "KRW" else 1
+    currency = st.selectbox("결제 통화", ["KRW", "USD"], index=currency_idx)
 
     exposure_default_idx = 1 if currency == "USD" else 0
+    if product_info and product_info.get("exposure_currency"):
+        exposure_default_idx = list(EXPOSURE_CURRENCY_OPTIONS).index(product_info["exposure_currency"]) if product_info["exposure_currency"] in EXPOSURE_CURRENCY_OPTIONS else exposure_default_idx
     exposure_currency = st.selectbox(
         "노출통화 (환율 리스크)",
         list(EXPOSURE_CURRENCY_OPTIONS),
         index=exposure_default_idx,
         help="결제 통화와 다를 수 있습니다. 예: 국내 상장 KODEX 나스닥100은 원화로 거래되어도 미국 지수·달러 자산에 노출될 수 있어 노출통화를 USD로 둘 수 있습니다.",
     )
+    
+    ac_default_idx = list(ASSET_CLASS_OPTIONS).index(NEW_TRADE_DEFAULT_ASSET_CLASS)
+    if product_info and product_info.get("asset_class"):
+        ac_default_idx = list(ASSET_CLASS_OPTIONS).index(product_info["asset_class"]) if product_info["asset_class"] in ASSET_CLASS_OPTIONS else ac_default_idx
     asset_class = st.selectbox(
         "자산군",
         list(ASSET_CLASS_OPTIONS),
-        index=list(ASSET_CLASS_OPTIONS).index(NEW_TRADE_DEFAULT_ASSET_CLASS),
+        index=ac_default_idx,
     )
+    
+    market_default = product_info.get("market", "KRX") if product_info else "KRX"
+    market = st.selectbox("시장 (Market)", ["KRX", "NASDAQ", "NYSE", "CME"], index=["KRX", "NASDAQ", "NYSE", "CME"].index(market_default) if market_default in ["KRX", "NASDAQ", "NYSE", "CME"] else 0)
+    
+    multiplier_default = product_info.get("multiplier", 1.0) if product_info else 1.0
+    multiplier = st.number_input("거래승수 (Multiplier)", min_value=0.01, value=float(multiplier_default), step=1.0, help="주식은 1, 달러선물은 10000 등")
 
     trade_fx_krw_per_usd = 1.0
     if currency == "USD":
@@ -135,6 +152,9 @@ with st.sidebar.form("trade_form"):
                 # 데이터 디렉토리 확인
                 if not os.path.exists("data"):
                     os.makedirs("data")
+                
+                # Product Master 업데이트
+                add_or_update_product(ticker, asset_class, market, currency, exposure_currency, multiplier)
                 
                 # CSV에 추가
                 add_trade(
@@ -197,7 +217,7 @@ if not df.empty:
     display_df.loc[fx_sym_mask, "currency"] = "KRW (USDKRW)"
 
     # 총합 계산 - 항상 원화 기준
-    total_value = display_df["currentValueKrw"].sum()
+    total_value = display_df[display_df["asset_class"] != "선물"]["currentValueKrw"].sum()
     total_unrealized_pnl = display_df["unrealizedPnlKrw"].sum()
     total_realized_pnl = display_df["realizedPnlKrw"].sum()
     total_pnl_change = display_df["pnlChangeKrw"].sum()
@@ -237,8 +257,14 @@ if not df.empty:
         holdings_df = display_df[display_df["currentQuantity"] != 0].copy()
         
         if not holdings_df.empty:
-            # 비중 계산
-            holdings_df['weight'] = (holdings_df['currentValue'] / total_value) * 100
+            # 비중 계산 (선물 제외)
+            non_futures = holdings_df[holdings_df["asset_class"] != "선물"]
+            valid_total = non_futures["currentValue"].sum()
+            holdings_df.loc[holdings_df["asset_class"] != "선물", 'weight'] = (
+                holdings_df.loc[holdings_df["asset_class"] != "선물", 'currentValue'] / valid_total * 100
+                if valid_total > 0 else 0.0
+            )
+            holdings_df.loc[holdings_df["asset_class"] == "선물", 'weight'] = 0.0
             
             # 화면 표시용 데이터프레임 정리 (companyName 추가)
             show_df = holdings_df[
@@ -316,7 +342,7 @@ if not df.empty:
             
             # 파이 차트 (보유 비중) — USDKRW는 평가 0·비중 제외이므로 차트에서도 제외
             st.markdown("<h3 style='font-size: 1.1rem; margin-top: 30px; margin-bottom: 10px;'>포트폴리오 자산 비중</h3>", unsafe_allow_html=True)
-            pie_base = holdings_df[holdings_df["ticker"].str.upper() != FX_HEDGE_TICKER]
+            pie_base = holdings_df[(holdings_df["ticker"].str.upper() != FX_HEDGE_TICKER) & (holdings_df["asset_class"] != "선물")]
             if pie_base.empty:
                 st.caption("표시할 일반 보유 자산이 없습니다. (USDKRW 헤지는 자산 비중 차트에 포함하지 않습니다.)")
             else:
@@ -346,14 +372,14 @@ if not df.empty:
             st.caption(
                 "조각 크기·비중은 그룹별 순평가액의 절대값 합으로 표시합니다. 표의 평가액(원)은 부호 있는 순액입니다."
             )
-            by_asset = holdings_df.groupby("asset_class", as_index=False)["currentValueKrw"].sum()
+            by_asset = holdings_df[holdings_df["asset_class"] != "선물"].groupby("asset_class", as_index=False)["currentValueKrw"].sum()
             by_asset = by_asset.rename(columns={"currentValueKrw": "평가액_원"})
             by_asset["_slice"] = by_asset["평가액_원"].abs()
             by_asset = by_asset[by_asset["_slice"] > 1e-9]
             denom_a = float(by_asset["_slice"].sum())
             by_asset["비중(%)"] = by_asset["_slice"] / denom_a * 100 if denom_a > 0 else 0.0
 
-            by_exposure = holdings_df.groupby("exposure_currency", as_index=False)["currentValueKrw"].sum()
+            by_exposure = holdings_df[holdings_df["asset_class"] != "선물"].groupby("exposure_currency", as_index=False)["currentValueKrw"].sum()
             by_exposure = by_exposure.rename(columns={"currentValueKrw": "평가액_원"})
             by_exposure["_slice"] = by_exposure["평가액_원"].abs()
             by_exposure = by_exposure[by_exposure["_slice"] > 1e-9]

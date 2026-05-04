@@ -1,0 +1,218 @@
+{
+    "000660": {
+        "ticker": "000660",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0
+    },
+    "054950": {
+        "ticker": "054950",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0
+    },
+    "0046A0": {
+        "ticker": "0046A0",
+        "asset_class": "채권형",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "131970": {
+        "ticker": "131970",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0
+    },
+    "200670": {
+        "ticker": "200670",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0
+    },
+    "214150": {
+        "ticker": "214150",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0
+    },
+    "379800": {
+        "ticker": "379800",
+        "asset_class": "지수형",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "379810": {
+        "ticker": "379810",
+        "asset_class": "지수형",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "454910": {
+        "ticker": "454910",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0
+    },
+    "459580": {
+        "ticker": "459580",
+        "asset_class": "채권형",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0
+    },
+    "464310": {
+        "ticker": "464310",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "481180": {
+        "ticker": "481180",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "245340": {
+        "ticker": "245340",
+        "asset_class": "지수형",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "TSLA": {
+        "ticker": "TSLA",
+        "asset_class": "개별주식",
+        "market": "NASDAQ",
+        "settlement_currency": "USD",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "GOOG": {
+        "ticker": "GOOG",
+        "asset_class": "개별주식",
+        "market": "NASDAQ",
+        "settlement_currency": "USD",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "PLTR": {
+        "ticker": "PLTR",
+        "asset_class": "개별주식",
+        "market": "NASDAQ",
+        "settlement_currency": "USD",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "IGV": {
+        "ticker": "IGV",
+        "asset_class": "개별주식",
+        "market": "NASDAQ",
+        "settlement_currency": "USD",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "SDGR": {
+        "ticker": "SDGR",
+        "asset_class": "개별주식",
+        "market": "NASDAQ",
+        "settlement_currency": "USD",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "BIL": {
+        "ticker": "BIL",
+        "asset_class": "채권형",
+        "market": "NASDAQ",
+        "settlement_currency": "USD",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "ISRG": {
+        "ticker": "ISRG",
+        "asset_class": "개별주식",
+        "market": "NASDAQ",
+        "settlement_currency": "USD",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "NVDA": {
+        "ticker": "NVDA",
+        "asset_class": "개별주식",
+        "market": "NASDAQ",
+        "settlement_currency": "USD",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "DUOL": {
+        "ticker": "DUOL",
+        "asset_class": "개별주식",
+        "market": "NASDAQ",
+        "settlement_currency": "USD",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "064290": {
+        "ticker": "064290",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0
+    },
+    "360750": {
+        "ticker": "360750",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "USD",
+        "multiplier": 1.0
+    },
+    "009470": {
+        "ticker": "009470",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0
+    },
+    "005380": {
+        "ticker": "005380",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0
+    },
+    "A7565000": {
+        "ticker": "A7565000",
+        "asset_class": "선물",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 10000.0
+    }
+}
