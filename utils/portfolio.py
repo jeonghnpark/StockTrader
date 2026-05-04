@@ -221,9 +221,12 @@ def delete_trade(index):
 
 
 def _ls_shcode_from_ticker(ticker):
-    """LS증권 6자리 종목코드. 국내 주식은 정수 문자열, 해외 티커는 None."""
+    """LS증권 6자리 종목코드. 국내 주식은 정수 문자열, ETF/ETN 등은 영숫자 혼합 6자리."""
     t = str(ticker).strip().upper()
-    if t.isdigit() and 1 <= len(t) <= 6:
+    # 6자리 영숫자 (ETF 등) 또는 1~6자리 숫자 (일반 주식)
+    if t.isalnum() and len(t) == 6:
+        return t
+    if t.isdigit() and 1 <= len(t) < 6:
         return t.zfill(6)
     return None
 
@@ -254,27 +257,38 @@ def _ls_previous_close_to_float(outblock):
 
 
 def _get_ls_t1101_cached(shcode):
-    """t1101 호출 결과 캐시(짧은 TTL). 가격·종목명 조회를 한 번으로 묶기 위함."""
+    """t1101 호출 결과 캐시(짧은 TTL). 가격·종목명 조회를 한 번으로 묶기 위함.
+    
+    get_current_with_fallback()을 사용하여 자동 재시도 지원:
+    1차 시도: shcode 그대로
+    2차 시도: shcode.KS (일부 ETF 등이 필요)
+    """
     now = time.monotonic()
     if shcode in _LS_T1101_CACHE:
         ts, data = _LS_T1101_CACHE[shcode]
         if now - ts < _LS_T1101_CACHE_TTL_SEC:
             return data
-    data = ls_t1101.get_current(shcode)
+    
+    data = ls_t1101.get_current_with_fallback(shcode)
     _LS_T1101_CACHE[shcode] = (now, data)
     return data
 
 
 def get_current_price(ticker):
+    """현재가 조회. 국내: LS API → .KS 재시도 → 해외(yfinance)"""
     if str(ticker).strip().upper() == FX_HEDGE_TICKER:
         return get_exchange_rate()
+    
     shcode = _ls_shcode_from_ticker(ticker)
     if shcode:
         ob = _get_ls_t1101_cached(shcode)
-        # print(f"{shcode} is retrived from LS api")
-        return _ls_price_to_float(ob)
+        price = _ls_price_to_float(ob)
+        if price > 0:  # 성공
+            return price
+        # LS API 실패 → 해외주식으로 처리
+    
     try:
-        print(f"{ticker} is not retrived from LS api")
+        print(f"{ticker} is being retrieved from yfinance (LS API failed)")
         stock = yf.Ticker(ticker)
         todays_data = stock.history(period="1d")
         if not todays_data.empty:
@@ -286,14 +300,17 @@ def get_current_price(ticker):
 
 
 def get_previous_close_price(ticker):
-    """전일 종가 반환. USDKRW는 환율 미지원"""
+    """전일 종가 반환. 국내: LS API → .KS 재시도 → 해외(yfinance)"""
     if str(ticker).strip().upper() == FX_HEDGE_TICKER:
         return 0.0  # USDKRW는 전일 가격 정의 불가
     
     shcode = _ls_shcode_from_ticker(ticker)
     if shcode:
         ob = _get_ls_t1101_cached(shcode)
-        return _ls_previous_close_to_float(ob)
+        price = _ls_previous_close_to_float(ob)
+        if price > 0:  # 성공
+            return price
+        # LS API 실패 → 해외주식으로 처리
     
     # yfinance로 해외주식 전일 종가 조회
     try:
@@ -308,7 +325,7 @@ def get_previous_close_price(ticker):
 
 
 def get_company_name(ticker):
-    """종목 코드로 회사 이름. 국내는 LS t1101(hname), 해외는 yfinance info."""
+    """종목 코드로 회사 이름. 국내: LS API → .KS 재시도 → 해외(yfinance) → 코드 반환"""
     if str(ticker).strip().upper() == FX_HEDGE_TICKER:
         name = "USD/KRW 헤지(현물환율 기준)"
         _NAME_CACHE[ticker] = name
@@ -324,8 +341,7 @@ def get_company_name(ticker):
             name = str(ob["hname"]).strip()
             _NAME_CACHE[ticker] = name
             return name
-        _NAME_CACHE[ticker] = ticker
-        return ticker
+        # LS API 실패 → 해외주식으로 처리
 
     try:
         stock = yf.Ticker(ticker)

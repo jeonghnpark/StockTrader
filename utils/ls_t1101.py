@@ -45,5 +45,28 @@ def get_current(shcode="005930"):
             return None
         return res_json[f"{TR}OutBlock"]
     except (RequestException, JSONDecodeError, KeyError) as e:
-        logger.error("t1101 호출 오류: %s", e)
+        logger.error("t1101 호출 오류 (%s): %s", shcode, e)
         return None
+
+
+def get_current_with_fallback(shcode="005930"):
+    """
+    1차 시도: shcode 그대로
+    2차 시도: shcode.KS 붙여서 재시도 (일부 ETF 등 필요)
+    """
+    shcode = str(shcode).strip()
+    
+    # 1차 시도
+    result = get_current(shcode)
+    if result is not None:
+        return result
+    
+    # 2차 시도: .KS 붙여서 재시도
+    if not shcode.endswith('.KS') and not shcode.endswith('.KQ'):
+        logger.warning("t1101: First attempt failed for %s, retrying with .KS suffix", shcode)
+        result = get_current(f"{shcode}.KS")
+        if result is not None:
+            return result
+    
+    logger.error("t1101: All attempts failed for %s", shcode)
+    return None

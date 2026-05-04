@@ -67,7 +67,7 @@ if ticker_option == "기존 종목 선택":
         # 기존 종목 선택 시 종목명과 티커를 함께 표시
         ticker = st.sidebar.selectbox(
             "종목 선택", 
-            existing_tickers,
+            sorted(existing_tickers, key=lambda x: get_company_name(x)),
             format_func=lambda x: f"{get_company_name(x)} ({x})"
         )
     else:
@@ -307,12 +307,12 @@ if not df.empty:
             negative_columns = ['변동률(당일)', '평가손익(당일)', '평가손익(누적)', '누적수익률(%)', '매매손익']
             for col in negative_columns:
                 if col in show_df.columns:
-                    styled_df = styled_df.applymap(
+                    styled_df = styled_df.map(
                         highlight_negative,
                         subset=pd.IndexSlice[:, col]
                     )
             
-            st.dataframe(styled_df, use_container_width=True)
+            st.dataframe(styled_df, width='stretch')
             
             # 파이 차트 (보유 비중) — USDKRW는 평가 0·비중 제외이므로 차트에서도 제외
             st.markdown("<h3 style='font-size: 1.1rem; margin-top: 30px; margin-bottom: 10px;'>포트폴리오 자산 비중</h3>", unsafe_allow_html=True)
@@ -337,7 +337,7 @@ if not df.empty:
                     insidetextorientation="horizontal",
                     hoverinfo="skip",
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
 
             st.markdown(
                 "<h3 style='font-size: 1.1rem; margin-top: 30px; margin-bottom: 10px;'>속성별 자산 비중</h3>",
@@ -377,12 +377,12 @@ if not df.empty:
                         insidetextorientation="horizontal",
                         hoverinfo="skip",
                     )
-                    st.plotly_chart(fig_a, use_container_width=True)
+                    st.plotly_chart(fig_a, width='stretch')
                     show_a = by_asset[["asset_class", "평가액_원", "비중(%)"]].copy()
                     show_a.columns = ["자산군", "평가액(원)", "비중(%)"]
                     st.dataframe(
                         show_a.style.format({"평가액(원)": "{:,.0f}", "비중(%)": "{:,.1f}%"}),
-                        use_container_width=True,
+                        width='stretch',
                     )
                 else:
                     st.info("자산군별 집계할 평가금액이 없습니다.")
@@ -402,12 +402,12 @@ if not df.empty:
                         insidetextorientation="horizontal",
                         hoverinfo="skip",
                     )
-                    st.plotly_chart(fig_e, use_container_width=True)
+                    st.plotly_chart(fig_e, width='stretch')
                     show_e = by_exposure[["exposure_currency", "평가액_원", "비중(%)"]].copy()
                     show_e.columns = ["노출통화", "평가액(원)", "비중(%)"]
                     st.dataframe(
                         show_e.style.format({"평가액(원)": "{:,.0f}", "비중(%)": "{:,.1f}%"}),
-                        use_container_width=True,
+                        width='stretch',
                     )
                 else:
                     st.info("노출통화별 집계할 평가금액이 없습니다.")
@@ -497,12 +497,12 @@ if not df.empty:
                 return ''
             
             styled_completed = completed_show.style.format(completed_format)
-            styled_completed = styled_completed.applymap(
+            styled_completed = styled_completed.map(
                 highlight_negative_completed,
                 subset=pd.IndexSlice[:, '최종 매매손익']
             )
             
-            st.dataframe(styled_completed, use_container_width=True)
+            st.dataframe(styled_completed, width='stretch')
         else:
             st.info("거래완료 내역이 없습니다.")
 
@@ -575,7 +575,7 @@ if not df.empty:
             # 인덱스를 포함하여 표시하고 행 선택 기능 활성화
             event = st.dataframe(
                 current_history_df.style.format(history_format_dict), 
-                use_container_width=True,
+                width='stretch',
                 on_select="rerun",
                 selection_mode="single-row"
             )
