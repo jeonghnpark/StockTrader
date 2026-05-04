@@ -4,7 +4,7 @@
 			"path": "."
 		},
 		{
-			"path": "D:/dev/simple_trading2/simple_trading"
+			"path": "../simple_trading2/simple_trading"
 		}
 	],
 	"settings": {}
