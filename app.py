@@ -165,14 +165,10 @@ with col_btn:
 # 환율 가져오기
 exchange_rate = get_exchange_rate()
 
-col_view, col_acc = st.columns(2)
-with col_view:
-    # 보기 모드 (원화 환산) - 기본값을 인덱스 1(원화 환산)로 설정
-    view_mode = st.radio("표시 통화 모드", ["원래 통화로 보기 (USD/KRW 혼합)", "전체 원화(KRW)로 환산해서 보기"], index=1, horizontal=True)
-    is_krw_mode = "환산" in view_mode
-    if is_krw_mode:
-        st.caption(f"적용 환율: 1 USD = {exchange_rate:,.2f} KRW")
+# 전체 원화 환산 모드로 고정
+is_krw_mode = True
 
+col_acc = st.columns(1)[0]
 with col_acc:
     # 계좌 필터
     account_list = ["전체 계좌"] + existing_accounts
@@ -182,44 +178,35 @@ with col_acc:
 df = calculate_portfolio(selected_account)
 
 if not df.empty:
-    # 보기 모드에 따라 데이터 변환
+    # 항상 원화 환산으로 표시
     display_df = df.copy()
     
-    if is_krw_mode:
-        # USD: 단가·평가는 현재 환율로 표시, 장부·손익은 매매 시점 환율 누적(평균원화단가) 반영
-        # USDKRW는 단가가 이미 KRW/USD(원)이므로 환율을 한 번 더 곱하지 않음
-        usd_mask = (display_df["currency"] == "USD") & (
-            display_df["ticker"].str.upper() != FX_HEDGE_TICKER
-        )
-        display_df.loc[usd_mask, "averageCost"] = display_df.loc[usd_mask, "averageCostKrw"]
-        display_df.loc[usd_mask, "currentPrice"] = display_df.loc[usd_mask, "currentPrice"] * exchange_rate
-        display_df.loc[usd_mask, "currentValue"] = display_df.loc[usd_mask, "currentValueKrw"]
-        display_df.loc[usd_mask, "unrealizedPnl"] = display_df.loc[usd_mask, "unrealizedPnlKrw"]
-        display_df.loc[usd_mask, "realizedPnl"] = display_df.loc[usd_mask, "realizedPnlKrw"]
-        display_df.loc[usd_mask, "returnRate"] = display_df.loc[usd_mask, "returnRateKrw"]
-        display_df.loc[usd_mask, "currency"] = "KRW (환산)"
-        fx_sym_mask = display_df["ticker"].str.upper() == FX_HEDGE_TICKER
-        display_df.loc[fx_sym_mask, "currency"] = "KRW (USDKRW)"
+    # USD: 단가·평가는 현재 환율로 표시, 장부·손익은 매매 시점 환율 누적(평균원화단가) 반영
+    # USDKRW는 단가가 이미 KRW/USD(원)이므로 환율을 한 번 더 곱하지 않음
+    usd_mask = (display_df["currency"] == "USD") & (
+        display_df["ticker"].str.upper() != FX_HEDGE_TICKER
+    )
+    display_df.loc[usd_mask, "averageCost"] = display_df.loc[usd_mask, "averageCostKrw"]
+    display_df.loc[usd_mask, "currentPrice"] = display_df.loc[usd_mask, "currentPrice"] * exchange_rate
+    display_df.loc[usd_mask, "currentValue"] = display_df.loc[usd_mask, "currentValueKrw"]
+    display_df.loc[usd_mask, "unrealizedPnl"] = display_df.loc[usd_mask, "unrealizedPnlKrw"]
+    display_df.loc[usd_mask, "realizedPnl"] = display_df.loc[usd_mask, "realizedPnlKrw"]
+    display_df.loc[usd_mask, "returnRate"] = display_df.loc[usd_mask, "returnRateKrw"]
+    display_df.loc[usd_mask, "currency"] = "KRW (환산)"
+    fx_sym_mask = display_df["ticker"].str.upper() == FX_HEDGE_TICKER
+    display_df.loc[fx_sym_mask, "currency"] = "KRW (USDKRW)"
 
-    # 총합 계산
-    if is_krw_mode:
-        total_value = display_df["currentValueKrw"].sum()
-        total_unrealized_pnl = display_df["unrealizedPnlKrw"].sum()
-        total_realized_pnl = display_df["realizedPnlKrw"].sum()
-        total_pnl_change = display_df["pnlChangeKrw"].sum()
-    else:
-        total_value = display_df["currentValue"].sum()
-        total_unrealized_pnl = display_df["unrealizedPnl"].sum()
-        total_realized_pnl = display_df["realizedPnl"].sum()
-        # 전일 대비는 원화 기준으로만 계산
-        total_pnl_change = df["pnlChangeKrw"].sum()
+    # 총합 계산 - 항상 원화 기준
+    total_value = display_df["currentValueKrw"].sum()
+    total_unrealized_pnl = display_df["unrealizedPnlKrw"].sum()
+    total_realized_pnl = display_df["realizedPnlKrw"].sum()
+    total_pnl_change = display_df["pnlChangeKrw"].sum()
 
     # 상단 요약 지표 표시
     col1, col2, col3, col4, col5 = st.columns(5)
     
     def format_currency(val):
-        if is_krw_mode:
-            return f"₩{val:,.0f}"
+        # 원화 기호 없이 숫자만 표시
         return f"{val:,.0f}"
 
     col1.metric("총 자산 평가액", format_currency(total_value))
@@ -452,9 +439,9 @@ if not df.empty:
 
         if abs(_usd_exposure_krw) > 1e-6 or abs(_usdkrw_krw) > 1e-6:
             _m1, _m2, _m3 = st.columns(3)
-            _m1.metric("달러 노출 자산(원)", f"₩{_usd_exposure_krw:,.0f}")
-            _m2.metric("USDKRW 평가(원)", f"₩{_usdkrw_krw:,.0f}")
-            _m3.metric("넷 노출금액(원)", f"₩{_net_exposure_krw:,.0f}")
+            _m1.metric("달러 노출 자산(원)", f"{_usd_exposure_krw:,.0f}")
+            _m2.metric("USDKRW 평가(원)", f"{_usdkrw_krw:,.0f}")
+            _m3.metric("넷 노출금액(원)", f"{_net_exposure_krw:,.0f}")
         else:
             st.caption("표시할 달러 노출 자산 또는 USDKRW 포지션이 없습니다.")
 
@@ -466,14 +453,13 @@ if not df.empty:
         completed_df = df[(df["realizedPnlKrw"] != 0) & (abs(df["currentQuantity"]) < 1e-12)].copy()
         
         if not completed_df.empty:
-            # 원화 환산 모드 적용
+            # 원화 환산으로 고정
             display_completed = completed_df.copy()
-            if is_krw_mode:
-                usd_mask_c = (display_completed["currency"] == "USD") & (
-                    display_completed["ticker"].str.upper() != FX_HEDGE_TICKER
-                )
-                display_completed.loc[usd_mask_c, "averageCost"] = display_completed.loc[usd_mask_c, "averageCostKrw"]
-                display_completed.loc[usd_mask_c, "currency"] = "KRW (환산)"
+            usd_mask_c = (display_completed["currency"] == "USD") & (
+                display_completed["ticker"].str.upper() != FX_HEDGE_TICKER
+            )
+            display_completed.loc[usd_mask_c, "averageCost"] = display_completed.loc[usd_mask_c, "averageCostKrw"]
+            display_completed.loc[usd_mask_c, "currency"] = "KRW (환산)"
             
             # 표시용 데이터프레임
             completed_show = display_completed[
