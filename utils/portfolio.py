@@ -221,16 +221,8 @@ def delete_trade(index):
 
 
 def _ls_shcode_from_ticker(ticker):
-    """
-    LS증권 6자리 종목코드. 코스피/코스닥은 005930.KS / 005930.KQ 또는 005930 형식 지원.
-    해외·기타 티커는 None.
-    """
+    """LS증권 6자리 종목코드. 국내 주식은 정수 문자열, 해외 티커는 None."""
     t = str(ticker).strip().upper()
-    if t.endswith(".KS") or t.endswith(".KQ"):
-        code = t.split(".")[0]
-        if code.isdigit() and len(code) <= 6:
-            return code.zfill(6)
-        return None
     if t.isdigit() and 1 <= len(t) <= 6:
         return t.zfill(6)
     return None

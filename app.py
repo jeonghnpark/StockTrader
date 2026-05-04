@@ -73,9 +73,9 @@ if ticker_option == "기존 종목 선택":
     else:
         st.sidebar.warning("기존 매매 내역이 없습니다. '새 종목 직접 입력'을 선택해주세요.")
 else:
-    ticker = st.sidebar.text_input("종목 코드 (예: AAPL, 005930 또는 005930.KS)", "").upper()
+    ticker = st.sidebar.text_input("종목 코드 (예: AAPL, 005930)", "").upper()
     st.sidebar.caption(
-        "한국 주식은 LS증권 6자리 코드(예: 005930) 또는 005930.KS / 005930.KQ 형식. "
+        "한국 주식은 LS증권 6자리 코드(예: 005930). "
         f"달러 헤지·선물 포지션은 **{FX_HEDGE_TICKER}** 로 입력하세요. 단가는 KRW/USD(원화 환율)이며, 매도를 먼저 넣어도 됩니다."
     )
 
