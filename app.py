@@ -27,37 +27,20 @@ history_df = load_trade_history()
 existing_tickers = history_df['ticker'].unique().tolist() if not history_df.empty else []
 existing_accounts = history_df['account'].unique().tolist() if not history_df.empty and 'account' in history_df.columns else []
 
-# 계좌별 통화 매핑 (하드코딩 + 기존 데이터 기반)
-ACCOUNT_CURRENCY_MAP = {
-    "LS(한나)": "KRW",
-    "키움퇴직": "KRW",
-    "토스": "USD"
-}
-if not history_df.empty and 'account' in history_df.columns:
-    for acc in existing_accounts:
-        if acc not in ACCOUNT_CURRENCY_MAP:
-            acc_df = history_df[history_df['account'] == acc]
-            if not acc_df.empty:
-                ACCOUNT_CURRENCY_MAP[acc] = acc_df.iloc[0]['currency']
-
 # --- 사이드바: 매매 내역 추가 ---
 st.sidebar.header("새 매매 내역 추가")
 
 # 계좌 입력 방식 선택
 account_option = st.sidebar.radio("계좌 입력 방식", ["기존 계좌 선택", "새 계좌 직접 입력"])
 account = ""
-target_currency = "KRW"
 
 if account_option == "기존 계좌 선택":
     if existing_accounts:
         account = st.sidebar.selectbox("계좌 선택", existing_accounts)
-        target_currency = ACCOUNT_CURRENCY_MAP.get(account, "KRW")
-        st.sidebar.info(f"📌 [{account}] 계좌 지정 통화: **{target_currency}**")
     else:
         st.sidebar.warning("기존 계좌가 없습니다. '새 계좌 직접 입력'을 선택해주세요.")
 else:
     account = st.sidebar.text_input("새 계좌명", "새계좌")
-    target_currency = st.sidebar.selectbox("새 계좌 통화 지정", ["KRW", "USD"])
 
 # 종목 입력 방식 선택 (기존 종목 vs 직접 입력)
 ticker_option = st.sidebar.radio("종목 입력 방식", ["기존 종목 선택", "새 종목 직접 입력"])
@@ -94,8 +77,8 @@ with st.sidebar.form("trade_form"):
     trade_date = st.date_input("매매 일자", date.today())
     trade_type = st.selectbox("매매 종류", ["매수", "매도"])
     
-    # 통화 기본값을 target_currency에 맞춤
-    currency_idx = 0 if target_currency == "KRW" else 1
+    # 결제 통화 기본값 설정
+    currency_idx = 0 # 기본 KRW
     if product_info and product_info.get("settlement_currency"):
         currency_idx = 0 if product_info["settlement_currency"] == "KRW" else 1
     currency = st.selectbox("결제 통화", ["KRW", "USD"], index=currency_idx)
@@ -146,31 +129,28 @@ with st.sidebar.form("trade_form"):
 
     if submit_button:
         if ticker and account:
-            if currency != target_currency:
-                st.sidebar.error(f"🚨 입력 오류: [{account}] 계좌의 지정된 통화는 {target_currency}입니다. 통화를 일치시켜주세요.")
-            else:
-                # 데이터 디렉토리 확인
-                if not os.path.exists("data"):
-                    os.makedirs("data")
-                
-                # Product Master 업데이트
-                add_or_update_product(ticker, asset_class, market, currency, exposure_currency, multiplier)
-                
-                # CSV에 추가
-                add_trade(
-                    trade_date,
-                    account,
-                    ticker,
-                    trade_type,
-                    quantity,
-                    price,
-                    currency,
-                    fx_krw_per_usd=trade_fx_krw_per_usd,
-                    exposure_currency=exposure_currency,
-                    asset_class=asset_class,
-                )
-                st.sidebar.success(f"[{account}] {ticker} {quantity}주 {trade_type} 추가 완료!")
-                st.rerun() # 앱 새로고침
+            # 데이터 디렉토리 확인
+            if not os.path.exists("data"):
+                os.makedirs("data")
+            
+            # Product Master 업데이트
+            add_or_update_product(ticker, asset_class, market, currency, exposure_currency, multiplier)
+            
+            # CSV에 추가
+            add_trade(
+                trade_date,
+                account,
+                ticker,
+                trade_type,
+                quantity,
+                price,
+                currency,
+                fx_krw_per_usd=trade_fx_krw_per_usd,
+                exposure_currency=exposure_currency,
+                asset_class=asset_class,
+            )
+            st.sidebar.success(f"[{account}] {ticker} {quantity}주 {trade_type} 추가 완료!")
+            st.rerun() # 앱 새로고침
         else:
             st.sidebar.error("계좌명과 종목 코드를 모두 입력해주세요.")
 
@@ -668,25 +648,21 @@ if not df.empty:
                     col_btn1, col_btn2 = st.columns([1, 10])
                     with col_btn1:
                         if st.button("수정", type="primary", key=f"btn_update_{edit_index}"):
-                            expected_currency = ACCOUNT_CURRENCY_MAP.get(edit_account, edit_currency)
-                            if edit_currency != expected_currency:
-                                st.error(f"🚨 수정 오류: [{edit_account}] 계좌는 {expected_currency} 전용입니다. 통화를 확인해주세요.")
-                            else:
-                                if update_trade(
-                                    edit_index,
-                                    edit_date,
-                                    edit_account,
-                                    edit_ticker,
-                                    edit_type,
-                                    edit_quantity,
-                                    edit_price,
-                                    edit_currency,
-                                    fx_krw_per_usd=edit_fx_krw,
-                                    exposure_currency=edit_exposure,
-                                    asset_class=edit_asset_class,
-                                ):
-                                    st.success("성공적으로 수정되었습니다.")
-                                    st.rerun()
+                            if update_trade(
+                                edit_index,
+                                edit_date,
+                                edit_account,
+                                edit_ticker,
+                                edit_type,
+                                edit_quantity,
+                                edit_price,
+                                edit_currency,
+                                fx_krw_per_usd=edit_fx_krw,
+                                exposure_currency=edit_exposure,
+                                asset_class=edit_asset_class,
+                            ):
+                                st.success("성공적으로 수정되었습니다.")
+                                st.rerun()
                     with col_btn2:
                         if st.button("삭제", type="secondary", key=f"btn_delete_{edit_index}"):
                             if delete_trade(edit_index):
