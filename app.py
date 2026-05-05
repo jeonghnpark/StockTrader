@@ -180,16 +180,12 @@ if not df.empty:
     # 항상 원화 환산으로 표시
     display_df = df.copy()
     
-    # USD: 단가·평가는 현재 환율로 표시, 장부·손익은 매매 시점 환율 누적(평균원화단가) 반영
-    # USDKRW는 단가가 이미 KRW/USD(원)이므로 환율을 한 번 더 곱하지 않음
+    # USD: 평가손익은 원화 기준으로 표시, 단가/가격은 USD 원본 유지
     usd_mask = (display_df["currency"] == "USD") & (display_df["asset_class"] != "선물")
-    display_df.loc[usd_mask, "averageCost"] = display_df.loc[usd_mask, "averageCostKrw"]
-    display_df.loc[usd_mask, "currentPrice"] = display_df.loc[usd_mask, "currentPrice"] * exchange_rate
     display_df.loc[usd_mask, "currentValue"] = display_df.loc[usd_mask, "currentValueKrw"]
     display_df.loc[usd_mask, "unrealizedPnl"] = display_df.loc[usd_mask, "unrealizedPnlKrw"]
     display_df.loc[usd_mask, "realizedPnl"] = display_df.loc[usd_mask, "realizedPnlKrw"]
     display_df.loc[usd_mask, "returnRate"] = display_df.loc[usd_mask, "returnRateKrw"]
-    display_df.loc[usd_mask, "currency"] = "KRW (환산)"
 
     # 총합 계산 - 항상 원화 기준
     total_value = display_df[display_df["asset_class"] != "선물"]["currentValueKrw"].sum()
@@ -246,14 +242,15 @@ if not df.empty:
                 [
                     "ticker",
                     "companyName",
+                    "currency",
                     "exposure_currency",
                     "asset_class",
                     "currentQuantity",
                     "averageCost",
                     "currentPrice",
-                    "currentValue",
                     "previousClosePrice",
                     "pnlChangeRate",
+                    "currentValue",
                     "pnlChangeKrw",
                     "unrealizedPnl",
                     "returnRate",
@@ -264,14 +261,15 @@ if not df.empty:
             show_df.columns = [
                 "종목코드",
                 "종목명",
+                "결제통화",
                 "노출통화",
                 "자산군",
                 "보유수량",
                 "평균단가",
                 "현재가",
-                "평가금액",
                 "전일가",
                 "변동률(당일)",
+                "평가금액",
                 "평가손익(당일)",
                 "평가손익(누적)",
                 "누적수익률(%)",
@@ -279,13 +277,27 @@ if not df.empty:
                 "비중(%)",
             ]
             
+            # 통화별 단가/가격 포맷팅 함수
+            def format_price_by_currency(val, currency):
+                """USD는 소수 둘째자리 + $, KRW는 소수점 없음"""
+                if pd.isna(val) or not isinstance(val, (int, float)):
+                    return val
+                if currency == "USD":
+                    return f"${val:,.2f}"
+                else:
+                    return f"{val:,.0f}"
+            
+            # 평균단가, 현재가, 전일가를 통화별로 포맷팅하여 문자열로 변환
+            for col in ["평균단가", "현재가", "전일가"]:
+                show_df[col] = show_df.apply(
+                    lambda row: format_price_by_currency(row[col], row["결제통화"]), 
+                    axis=1
+                )
+            
             # 포맷팅 설정 (모두 소수점 버림, 변동률(당일)는 소수 첫째자리)
             format_dict = {
                 '보유수량': '{:,.0f}',
-                '평균단가': '{:,.0f}',
-                '현재가': '{:,.0f}',
                 '평가금액': '{:,.0f}',
-                '전일가': '{:,.0f}',
                 '변동률(당일)': '{:,.1f}%',
                 '평가손익(당일)': '{:,.0f}',
                 '평가손익(누적)': '{:,.0f}',
