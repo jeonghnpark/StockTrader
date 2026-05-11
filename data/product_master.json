@@ -1,218 +1,330 @@
 {
     "000660": {
         "ticker": "000660",
+        "name": "SK하이닉스",
         "asset_class": "개별주식",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "KRW",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "반도체"
+        ]
     },
     "054950": {
         "ticker": "054950",
+        "name": "제이브이엠",
         "asset_class": "개별주식",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "KRW",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "헬스케어"
+        ]
     },
     "0046A0": {
         "ticker": "0046A0",
+        "name": "TIGER 미국초단기(3개",
         "asset_class": "채권형",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "채권"
+        ]
     },
     "131970": {
         "ticker": "131970",
+        "name": "두산테스나",
         "asset_class": "개별주식",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "KRW",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "반도체"
+        ]
     },
     "200670": {
         "ticker": "200670",
+        "name": "휴메딕스",
         "asset_class": "개별주식",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "KRW",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "헬스케어"
+        ]
     },
     "214150": {
         "ticker": "214150",
+        "name": "클래시스",
         "asset_class": "개별주식",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "KRW",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "헬스케어"
+        ]
     },
     "379800": {
         "ticker": "379800",
+        "name": "KODEX 미국S&P500",
         "asset_class": "지수형",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "지수"
+        ]
     },
     "379810": {
         "ticker": "379810",
+        "name": "KODEX 미국나스닥100",
         "asset_class": "지수형",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "지수"
+        ]
     },
     "454910": {
         "ticker": "454910",
+        "name": "두산로보틱스",
         "asset_class": "개별주식",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "KRW",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "로봇"
+        ]
     },
     "459580": {
         "ticker": "459580",
+        "name": "KODEX CD금리액티브(",
         "asset_class": "채권형",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "KRW",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "채권"
+        ]
     },
     "464310": {
         "ticker": "464310",
+        "name": "TIGER 글로벌AI&로보",
         "asset_class": "개별주식",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "로봇"
+        ]
     },
     "481180": {
         "ticker": "481180",
+        "name": "SOL 미국AI소프트웨어",
         "asset_class": "개별주식",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "소프트웨어"
+        ]
     },
     "245340": {
         "ticker": "245340",
+        "name": "TIGER 미국다우존스30",
         "asset_class": "지수형",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "지수"
+        ]
     },
     "TSLA": {
         "ticker": "TSLA",
+        "name": "Tesla, Inc.",
         "asset_class": "개별주식",
         "market": "NASDAQ",
         "settlement_currency": "USD",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "로봇",
+            "에너지",
+            "AI"
+        ]
     },
     "GOOG": {
         "ticker": "GOOG",
+        "name": "Alphabet Inc.",
         "asset_class": "개별주식",
         "market": "NASDAQ",
         "settlement_currency": "USD",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "AI"
+        ]
     },
     "PLTR": {
         "ticker": "PLTR",
+        "name": "Palantir Technologies Inc.",
         "asset_class": "개별주식",
         "market": "NASDAQ",
         "settlement_currency": "USD",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "소프트웨어"
+        ]
     },
     "IGV": {
         "ticker": "IGV",
+        "name": "iShares Expanded Tech-Software ",
         "asset_class": "개별주식",
         "market": "NASDAQ",
         "settlement_currency": "USD",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "소프트웨어"
+        ]
     },
     "SDGR": {
         "ticker": "SDGR",
+        "name": "Schrodinger, Inc.",
         "asset_class": "개별주식",
         "market": "NASDAQ",
         "settlement_currency": "USD",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "소프트웨어",
+            "헬스케어"
+        ]
     },
     "BIL": {
         "ticker": "BIL",
+        "name": "State Street SPDR Bloomberg 1-3",
         "asset_class": "채권형",
         "market": "NASDAQ",
         "settlement_currency": "USD",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "채권"
+        ]
     },
     "ISRG": {
         "ticker": "ISRG",
+        "name": "Intuitive Surgical, Inc.",
         "asset_class": "개별주식",
         "market": "NASDAQ",
         "settlement_currency": "USD",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "헬스케어"
+        ]
     },
     "NVDA": {
         "ticker": "NVDA",
+        "name": "NVIDIA Corporation",
         "asset_class": "개별주식",
         "market": "NASDAQ",
         "settlement_currency": "USD",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "반도체"
+        ]
     },
     "DUOL": {
         "ticker": "DUOL",
+        "name": "Duolingo, Inc.",
         "asset_class": "개별주식",
         "market": "NASDAQ",
         "settlement_currency": "USD",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "소프트웨어"
+        ]
     },
     "064290": {
         "ticker": "064290",
+        "name": "인텍플러스",
         "asset_class": "개별주식",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "KRW",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "반도체"
+        ]
     },
     "360750": {
         "ticker": "360750",
+        "name": "TIGER 미국S&P500",
         "asset_class": "개별주식",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "USD",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "지수"
+        ]
     },
     "009470": {
         "ticker": "009470",
+        "name": "삼화전기",
         "asset_class": "개별주식",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "KRW",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "반도체"
+        ]
     },
     "005380": {
         "ticker": "005380",
+        "name": "현대차",
         "asset_class": "개별주식",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "KRW",
-        "multiplier": 1.0
+        "multiplier": 1.0,
+        "tags": [
+            "자동차",
+            "로봇"
+        ]
     },
     "A7565000": {
         "ticker": "A7565000",
+        "name": "미국달러 F 202605",
         "asset_class": "선물",
         "market": "KRX",
         "settlement_currency": "KRW",
         "exposure_currency": "USD",
-        "multiplier": 10000.0
+        "multiplier": 10000.0,
+        "tags": [
+            "선물"
+        ]
     }
 }
