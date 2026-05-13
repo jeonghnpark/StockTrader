@@ -140,7 +140,7 @@
         "exposure_currency": "USD",
         "multiplier": 1.0,
         "tags": [
-            "소프트웨어"
+            "AI"
         ]
     },
     "245340": {
@@ -164,9 +164,7 @@
         "exposure_currency": "USD",
         "multiplier": 1.0,
         "tags": [
-            "로봇",
-            "에너지",
-            "AI"
+            "로봇"
         ]
     },
     "GOOG": {
@@ -190,7 +188,7 @@
         "exposure_currency": "USD",
         "multiplier": 1.0,
         "tags": [
-            "소프트웨어"
+            "AI"
         ]
     },
     "IGV": {
@@ -202,7 +200,7 @@
         "exposure_currency": "USD",
         "multiplier": 1.0,
         "tags": [
-            "소프트웨어"
+            "AI"
         ]
     },
     "SDGR": {
@@ -214,8 +212,7 @@
         "exposure_currency": "USD",
         "multiplier": 1.0,
         "tags": [
-            "소프트웨어",
-            "헬스케어"
+            "AI"
         ]
     },
     "BIL": {
@@ -239,7 +236,7 @@
         "exposure_currency": "USD",
         "multiplier": 1.0,
         "tags": [
-            "헬스케어"
+            "AI"
         ]
     },
     "NVDA": {
@@ -311,7 +308,6 @@
         "exposure_currency": "KRW",
         "multiplier": 1.0,
         "tags": [
-            "자동차",
             "로봇"
         ]
     },
@@ -325,6 +321,42 @@
         "multiplier": 10000.0,
         "tags": [
             "선물"
+        ]
+    },
+    "012450": {
+        "ticker": "012450",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0,
+        "name": "한화에어로스페이스",
+        "tags": [
+            "항공우주"
+        ]
+    },
+    "034020": {
+        "ticker": "034020",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0,
+        "name": "두산에너빌리티",
+        "tags": [
+            "에너지"
+        ]
+    },
+    "267260": {
+        "ticker": "267260",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0,
+        "name": "HD현대일렉트릭",
+        "tags": [
+            "에너지"
         ]
     }
 }

@@ -382,13 +382,21 @@ def get_previous_close_price(ticker):
 
 
 def get_company_name(ticker):
-    """종목 코드로 회사 이름. 국내: LS API → .KS 재시도 → 해외(yfinance) → 코드 반환"""
+    """종목 코드로 회사 이름. product_master → 국내: LS API → .KS 재시도 → 해외(yfinance) → 코드 반환"""
 
     if ticker in _NAME_CACHE:
         return _NAME_CACHE[ticker]
 
     ticker_str = str(ticker).strip().upper()
     product_info = get_product(ticker_str)
+    
+    # 1. product_master.json에서 name 필드 확인 (최우선)
+    if product_info and product_info.get("name"):
+        name = str(product_info["name"]).strip()
+        if name:
+            _NAME_CACHE[ticker] = name
+            return name
+
     is_future = (product_info and product_info.get("asset_class") == "선물") or len(
         ticker_str
     ) == 8
@@ -431,7 +439,7 @@ def get_exchange_rate():
         return 1300.0
 
 
-def calculate_portfolio(account_filter=None):
+def calculate_portfolio(account_filter=None, tag_filter=None):
     df = load_trade_history()
     if df.empty:
         return pd.DataFrame()
@@ -439,6 +447,17 @@ def calculate_portfolio(account_filter=None):
     # 계좌 필터링 적용
     if account_filter and account_filter != "전체 계좌":
         df = df[df["account"] == account_filter]
+
+    # 태그 필터링 적용
+    if tag_filter and tag_filter != "전체 태그":
+        # product_master에서 해당 태그를 가진 종목들의 티커를 가져옵니다.
+        from utils.product_master import load_product_master
+        products = load_product_master()
+        tickers_with_tag = [
+            t for t, info in products.items() 
+            if "tags" in info and tag_filter in info["tags"]
+        ]
+        df = df[df["ticker"].isin(tickers_with_tag)]
 
     if df.empty:
         return pd.DataFrame()
@@ -472,6 +491,7 @@ def calculate_portfolio(account_filter=None):
                 "exposure_currency": exp,
                 "asset_class": ac,
                 "companyName": get_company_name(ticker),
+                "tags": get_product(ticker).get("tags", []),
             }
         else:
             portfolio[ticker]["exposure_currency"] = exp
