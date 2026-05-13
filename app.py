@@ -102,36 +102,83 @@ with st.sidebar.form("trade_form"):
             key="ticker_tags_multiselect"
         )
 
-    # 결제 통화 기본값 설정
-    currency_idx = 0 # 기본 KRW
-    if product_info and product_info.get("settlement_currency"):
-        currency_idx = 0 if product_info["settlement_currency"] == "KRW" else 1
-    currency = st.selectbox("결제 통화", ["KRW", "USD"], index=currency_idx)
+    # 새 종목 입력 모드와 기존 종목 선택 모드 구분
+    if ticker_option == "새 종목 직접 입력":
+        # 새 종목: 모든 조건 필수 입력
+        st.subheader("⚠️ 모든 항목을 명시적으로 설정해주세요")
+        
+        # 결제 통화 (필수)
+        currency_required = st.selectbox(
+            "결제 통화 *",
+            ["선택하세요", "KRW", "USD"],
+            help="종목의 거래 통화를 선택하세요"
+        )
+        currency = None if currency_required == "선택하세요" else currency_required
+        
+        # 노출통화 (필수)
+        exposure_required = st.selectbox(
+            "노출통화 (환율 리스크) *",
+            ["선택하세요"] + list(EXPOSURE_CURRENCY_OPTIONS),
+            help="종목의 환율 리스크 노출 통화를 선택하세요"
+        )
+        exposure_currency = None if exposure_required == "선택하세요" else exposure_required
+        
+        # 자산군 (필수)
+        asset_class_required = st.selectbox(
+            "자산군 *",
+            ["선택하세요"] + list(ASSET_CLASS_OPTIONS),
+            help="주식, ETF, 선물 등 자산군을 선택하세요"
+        )
+        asset_class = None if asset_class_required == "선택하세요" else asset_class_required
+        
+        # 시장 (필수)
+        market_required = st.selectbox(
+            "시장 (Market) *",
+            ["선택하세요", "KRX", "NASDAQ", "NYSE", "CME"],
+            help="종목이 거래되는 시장을 선택하세요"
+        )
+        market = None if market_required == "선택하세요" else market_required
+        
+        # 거래승수 (필수)
+        multiplier = st.number_input(
+            "거래승수 (Multiplier) *",
+            min_value=0.0,
+            value=0.0,
+            step=1.0,
+            help="주식은 1, 달러선물은 10000 등. 0.0은 미입력 상태로 간주됩니다"
+        )
+        
+    else:
+        # 기존 종목: 기본값 사용
+        currency_idx = 0  # 기본 KRW
+        if product_info and product_info.get("settlement_currency"):
+            currency_idx = 0 if product_info["settlement_currency"] == "KRW" else 1
+        currency = st.selectbox("결제 통화", ["KRW", "USD"], index=currency_idx)
 
-    exposure_default_idx = 1 if currency == "USD" else 0
-    if product_info and product_info.get("exposure_currency"):
-        exposure_default_idx = list(EXPOSURE_CURRENCY_OPTIONS).index(product_info["exposure_currency"]) if product_info["exposure_currency"] in EXPOSURE_CURRENCY_OPTIONS else exposure_default_idx
-    exposure_currency = st.selectbox(
-        "노출통화 (환율 리스크)",
-        list(EXPOSURE_CURRENCY_OPTIONS),
-        index=exposure_default_idx,
-        help="결제 통화와 다를 수 있습니다. 예: 국내 상장 KODEX 나스닥100은 원화로 거래되어도 미국 지수·달러 자산에 노출될 수 있어 노출통화를 USD로 둘 수 있습니다.",
-    )
-    
-    ac_default_idx = list(ASSET_CLASS_OPTIONS).index(NEW_TRADE_DEFAULT_ASSET_CLASS)
-    if product_info and product_info.get("asset_class"):
-        ac_default_idx = list(ASSET_CLASS_OPTIONS).index(product_info["asset_class"]) if product_info["asset_class"] in ASSET_CLASS_OPTIONS else ac_default_idx
-    asset_class = st.selectbox(
-        "자산군",
-        list(ASSET_CLASS_OPTIONS),
-        index=ac_default_idx,
-    )
-    
-    market_default = product_info.get("market", "KRX") if product_info else "KRX"
-    market = st.selectbox("시장 (Market)", ["KRX", "NASDAQ", "NYSE", "CME"], index=["KRX", "NASDAQ", "NYSE", "CME"].index(market_default) if market_default in ["KRX", "NASDAQ", "NYSE", "CME"] else 0)
-    
-    multiplier_default = product_info.get("multiplier", 1.0) if product_info else 1.0
-    multiplier = st.number_input("거래승수 (Multiplier)", min_value=0.01, value=float(multiplier_default), step=1.0, help="주식은 1, 달러선물은 10000 등")
+        exposure_default_idx = 1 if currency == "USD" else 0
+        if product_info and product_info.get("exposure_currency"):
+            exposure_default_idx = list(EXPOSURE_CURRENCY_OPTIONS).index(product_info["exposure_currency"]) if product_info["exposure_currency"] in EXPOSURE_CURRENCY_OPTIONS else exposure_default_idx
+        exposure_currency = st.selectbox(
+            "노출통화 (환율 리스크)",
+            list(EXPOSURE_CURRENCY_OPTIONS),
+            index=exposure_default_idx,
+            help="결제 통화와 다를 수 있습니다. 예: 국내 상장 KODEX 나스닥100은 원화로 거래되어도 미국 지수·달러 자산에 노출될 수 있어 노출통화를 USD로 둘 수 있습니다.",
+        )
+        
+        ac_default_idx = list(ASSET_CLASS_OPTIONS).index(NEW_TRADE_DEFAULT_ASSET_CLASS)
+        if product_info and product_info.get("asset_class"):
+            ac_default_idx = list(ASSET_CLASS_OPTIONS).index(product_info["asset_class"]) if product_info["asset_class"] in ASSET_CLASS_OPTIONS else ac_default_idx
+        asset_class = st.selectbox(
+            "자산군",
+            list(ASSET_CLASS_OPTIONS),
+            index=ac_default_idx,
+        )
+        
+        market_default = product_info.get("market", "KRX") if product_info else "KRX"
+        market = st.selectbox("시장 (Market)", ["KRX", "NASDAQ", "NYSE", "CME"], index=["KRX", "NASDAQ", "NYSE", "CME"].index(market_default) if market_default in ["KRX", "NASDAQ", "NYSE", "CME"] else 0)
+        
+        multiplier_default = product_info.get("multiplier", 1.0) if product_info else 1.0
+        multiplier = st.number_input("거래승수 (Multiplier)", min_value=0.01, value=float(multiplier_default), step=1.0, help="주식은 1, 달러선물은 10000 등")
 
     trade_fx_krw_per_usd = 1.0
     if currency == "USD":
@@ -142,6 +189,9 @@ with st.sidebar.form("trade_form"):
             step=1.0,
             help="매수·매도 모두 해당 체결 시점의 USD/KRW 환율을 입력합니다. 실현손익은 매도환율×매도단가×수량 − 장부원화평균단가×수량으로 반영됩니다.",
         )
+    elif currency is None and ticker_option == "새 종목 직접 입력":
+        # 새 종목 입력 모드에서 결제통화가 선택되지 않은 경우
+        st.text_input("매매 당시 환율 (1 USD = ? KRW)", value="", placeholder="결제 통화를 먼저 선택해주세요", disabled=True)
     
     # 수량 기본값 1.0으로 설정, 1씩 증가
     quantity = st.number_input("수량", min_value=0.01, value=1.0, step=1.0)
@@ -153,7 +203,31 @@ with st.sidebar.form("trade_form"):
     submit_button = st.form_submit_button("내역 추가")
 
     if submit_button:
-        if ticker and account:
+        # 기본 검증
+        error_messages = []
+        
+        if not ticker:
+            error_messages.append("종목 코드를 입력해주세요.")
+        if not account:
+            error_messages.append("계좌명을 입력해주세요.")
+        
+        # 새 종목 입력 모드 추가 검증
+        if ticker_option == "새 종목 직접 입력":
+            if currency is None:
+                error_messages.append("결제 통화를 선택해주세요.")
+            if exposure_currency is None:
+                error_messages.append("노출통화를 선택해주세요.")
+            if asset_class is None:
+                error_messages.append("자산군을 선택해주세요.")
+            if market is None:
+                error_messages.append("시장을 선택해주세요.")
+            if multiplier <= 0.0:
+                error_messages.append("거래승수는 0보다 커야 합니다.")
+        
+        if error_messages:
+            error_text = "\n".join(f"• {msg}" for msg in error_messages)
+            st.sidebar.error(f"입력 오류:\n{error_text}")
+        else:
             # 데이터 디렉토리 확인
             if not os.path.exists("data"):
                 os.makedirs("data")
@@ -176,8 +250,6 @@ with st.sidebar.form("trade_form"):
             )
             st.sidebar.success(f"[{account}] {ticker} {quantity}주 {trade_type} 추가 완료!")
             st.rerun() # 앱 새로고침
-        else:
-            st.sidebar.error("계좌명과 종목 코드를 모두 입력해주세요.")
 
 # --- 메인 화면 ---
 col_title, col_btn = st.columns([4, 1])

@@ -320,7 +320,7 @@
         "exposure_currency": "USD",
         "multiplier": 10000.0,
         "tags": [
-            "선물"
+            "AI"
         ]
     },
     "012450": {
@@ -357,6 +357,18 @@
         "name": "HD현대일렉트릭",
         "tags": [
             "에너지"
+        ]
+    },
+    "A7566000": {
+        "ticker": "A7566000",
+        "asset_class": "선물",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "USD",
+        "multiplier": 10000.0,
+        "name": "미국달러 F 202606",
+        "tags": [
+            "선물"
         ]
     }
 }
