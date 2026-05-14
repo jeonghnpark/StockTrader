@@ -2,9 +2,19 @@
 
 ## 개요
 
-주식 포트폴리오를 실시간으로 관리하고 분석하는 웹 기반 도구입니다. 현재 운영 중
+주식 포트폴리오를 실시간으로 관리하고 분석하는 웹 기반 도구입니다. 현재 운영 중입니다.
 
 **서비스 링크**: [https://stocktrader-qtpmeqpsaycuukf2fjfyxd.streamlit.app/](https://stocktrader-qtpmeqpsaycuukf2fjfyxd.streamlit.app/)
+
+## 주요 화면
+
+### 포트폴리오 요약
+![포트폴리오 요약](./assets/stock스크린샷1.jpg)
+*실시간 시세 반영, 종목별 보유 현황, 평가손익, 변동률 현황*
+
+### 자산 비중 분석
+![자산 비중 분석](./assets/stock스트린샷2.jpg)
+*자산군별 및 통화별 비중 분석, 포트폴리오 시각화*
 
 ---
 
@@ -38,12 +48,6 @@
 ## 운영 현황
 
 현재 실시간으로 운영 중입니다.
-
-![포트폴리오 요약](/assets/d__dev_StockTrader_stock____1.jpg)
-*포트폴리오 요약 화면 - 종목별 보유 현황 및 실시간 평가손익*
-
-![자산 비중 분석](/assets/d__dev_StockTrader_stock____2.jpg)
-*자산 비중 분석 - 자산군별, 통화별 분석 및 시각화*
 
 ---
 
