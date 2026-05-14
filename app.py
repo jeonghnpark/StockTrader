@@ -16,7 +16,7 @@ from utils.portfolio import (
     ASSET_CLASS_OPTIONS,
     NEW_TRADE_DEFAULT_ASSET_CLASS,
 )
-from utils.product_master import get_product, add_or_update_product
+from utils.product_master import get_product, add_or_update_product, get_all_tags # get_all_tags 임포트
 
 # 페이지 기본 설정
 st.set_page_config(page_title="주식 포트폴리오 트래커", layout="wide")
@@ -76,36 +76,109 @@ with st.sidebar.form("trade_form"):
     trade_date = st.date_input("매매 일자", date.today())
     trade_type = st.selectbox("매매 종류", ["매수", "매도"])
     
-    # 결제 통화 기본값 설정
-    currency_idx = 0 # 기본 KRW
-    if product_info and product_info.get("settlement_currency"):
-        currency_idx = 0 if product_info["settlement_currency"] == "KRW" else 1
-    currency = st.selectbox("결제 통화", ["KRW", "USD"], index=currency_idx)
+    # 태그 입력 필드 (새 종목 또는 기존 종목에 태그가 없는 경우)
+    current_tags_for_ticker = product_info.get("tags", []) if product_info else []
+    if ticker_option == "새 종목 직접 입력" or not current_tags_for_ticker:
+        tags_input_existing = st.multiselect(
+            "태그 선택 (기존 태그)",
+            options=get_all_tags(),
+            default=current_tags_for_ticker,
+            key="ticker_tags_multiselect"
+        )
+        new_tags_str = st.text_input("새 태그 직접 입력 (여러 개는 쉼표로 구분)", key="ticker_new_tags_input")
+        
+        tags_input = list(tags_input_existing)
+        if new_tags_str:
+            new_tags = [t.strip() for t in new_tags_str.split(",") if t.strip()]
+            for t in new_tags:
+                if t not in tags_input:
+                    tags_input.append(t)
+    else:
+        tags_input = st.multiselect(
+            "태그 (기존 종목 - 수정불가)",
+            options=get_all_tags(),
+            default=current_tags_for_ticker,
+            disabled=True,
+            key="ticker_tags_multiselect"
+        )
 
-    exposure_default_idx = 1 if currency == "USD" else 0
-    if product_info and product_info.get("exposure_currency"):
-        exposure_default_idx = list(EXPOSURE_CURRENCY_OPTIONS).index(product_info["exposure_currency"]) if product_info["exposure_currency"] in EXPOSURE_CURRENCY_OPTIONS else exposure_default_idx
-    exposure_currency = st.selectbox(
-        "노출통화 (환율 리스크)",
-        list(EXPOSURE_CURRENCY_OPTIONS),
-        index=exposure_default_idx,
-        help="결제 통화와 다를 수 있습니다. 예: 국내 상장 KODEX 나스닥100은 원화로 거래되어도 미국 지수·달러 자산에 노출될 수 있어 노출통화를 USD로 둘 수 있습니다.",
-    )
-    
-    ac_default_idx = list(ASSET_CLASS_OPTIONS).index(NEW_TRADE_DEFAULT_ASSET_CLASS)
-    if product_info and product_info.get("asset_class"):
-        ac_default_idx = list(ASSET_CLASS_OPTIONS).index(product_info["asset_class"]) if product_info["asset_class"] in ASSET_CLASS_OPTIONS else ac_default_idx
-    asset_class = st.selectbox(
-        "자산군",
-        list(ASSET_CLASS_OPTIONS),
-        index=ac_default_idx,
-    )
-    
-    market_default = product_info.get("market", "KRX") if product_info else "KRX"
-    market = st.selectbox("시장 (Market)", ["KRX", "NASDAQ", "NYSE", "CME"], index=["KRX", "NASDAQ", "NYSE", "CME"].index(market_default) if market_default in ["KRX", "NASDAQ", "NYSE", "CME"] else 0)
-    
-    multiplier_default = product_info.get("multiplier", 1.0) if product_info else 1.0
-    multiplier = st.number_input("거래승수 (Multiplier)", min_value=0.01, value=float(multiplier_default), step=1.0, help="주식은 1, 달러선물은 10000 등")
+    # 새 종목 입력 모드와 기존 종목 선택 모드 구분
+    if ticker_option == "새 종목 직접 입력":
+        # 새 종목: 모든 조건 필수 입력
+        st.subheader("⚠️ 모든 항목을 명시적으로 설정해주세요")
+        
+        # 결제 통화 (필수)
+        currency_required = st.selectbox(
+            "결제 통화 *",
+            ["선택하세요", "KRW", "USD"],
+            help="종목의 거래 통화를 선택하세요"
+        )
+        currency = None if currency_required == "선택하세요" else currency_required
+        
+        # 노출통화 (필수)
+        exposure_required = st.selectbox(
+            "노출통화 (환율 리스크) *",
+            ["선택하세요"] + list(EXPOSURE_CURRENCY_OPTIONS),
+            help="종목의 환율 리스크 노출 통화를 선택하세요"
+        )
+        exposure_currency = None if exposure_required == "선택하세요" else exposure_required
+        
+        # 자산군 (필수)
+        asset_class_required = st.selectbox(
+            "자산군 *",
+            ["선택하세요"] + list(ASSET_CLASS_OPTIONS),
+            help="주식, ETF, 선물 등 자산군을 선택하세요"
+        )
+        asset_class = None if asset_class_required == "선택하세요" else asset_class_required
+        
+        # 시장 (필수)
+        market_required = st.selectbox(
+            "시장 (Market) *",
+            ["선택하세요", "KRX", "NASDAQ", "NYSE", "CME"],
+            help="종목이 거래되는 시장을 선택하세요"
+        )
+        market = None if market_required == "선택하세요" else market_required
+        
+        # 거래승수 (필수)
+        multiplier = st.number_input(
+            "거래승수 (Multiplier) *",
+            min_value=0.0,
+            value=0.0,
+            step=1.0,
+            help="주식은 1, 달러선물은 10000 등. 0.0은 미입력 상태로 간주됩니다"
+        )
+        
+    else:
+        # 기존 종목: 기본값 사용
+        currency_idx = 0  # 기본 KRW
+        if product_info and product_info.get("settlement_currency"):
+            currency_idx = 0 if product_info["settlement_currency"] == "KRW" else 1
+        currency = st.selectbox("결제 통화", ["KRW", "USD"], index=currency_idx)
+
+        exposure_default_idx = 1 if currency == "USD" else 0
+        if product_info and product_info.get("exposure_currency"):
+            exposure_default_idx = list(EXPOSURE_CURRENCY_OPTIONS).index(product_info["exposure_currency"]) if product_info["exposure_currency"] in EXPOSURE_CURRENCY_OPTIONS else exposure_default_idx
+        exposure_currency = st.selectbox(
+            "노출통화 (환율 리스크)",
+            list(EXPOSURE_CURRENCY_OPTIONS),
+            index=exposure_default_idx,
+            help="결제 통화와 다를 수 있습니다. 예: 국내 상장 KODEX 나스닥100은 원화로 거래되어도 미국 지수·달러 자산에 노출될 수 있어 노출통화를 USD로 둘 수 있습니다.",
+        )
+        
+        ac_default_idx = list(ASSET_CLASS_OPTIONS).index(NEW_TRADE_DEFAULT_ASSET_CLASS)
+        if product_info and product_info.get("asset_class"):
+            ac_default_idx = list(ASSET_CLASS_OPTIONS).index(product_info["asset_class"]) if product_info["asset_class"] in ASSET_CLASS_OPTIONS else ac_default_idx
+        asset_class = st.selectbox(
+            "자산군",
+            list(ASSET_CLASS_OPTIONS),
+            index=ac_default_idx,
+        )
+        
+        market_default = product_info.get("market", "KRX") if product_info else "KRX"
+        market = st.selectbox("시장 (Market)", ["KRX", "NASDAQ", "NYSE", "CME"], index=["KRX", "NASDAQ", "NYSE", "CME"].index(market_default) if market_default in ["KRX", "NASDAQ", "NYSE", "CME"] else 0)
+        
+        multiplier_default = product_info.get("multiplier", 1.0) if product_info else 1.0
+        multiplier = st.number_input("거래승수 (Multiplier)", min_value=0.01, value=float(multiplier_default), step=1.0, help="주식은 1, 달러선물은 10000 등")
 
     trade_fx_krw_per_usd = 1.0
     if currency == "USD":
@@ -116,6 +189,9 @@ with st.sidebar.form("trade_form"):
             step=1.0,
             help="매수·매도 모두 해당 체결 시점의 USD/KRW 환율을 입력합니다. 실현손익은 매도환율×매도단가×수량 − 장부원화평균단가×수량으로 반영됩니다.",
         )
+    elif currency is None and ticker_option == "새 종목 직접 입력":
+        # 새 종목 입력 모드에서 결제통화가 선택되지 않은 경우
+        st.text_input("매매 당시 환율 (1 USD = ? KRW)", value="", placeholder="결제 통화를 먼저 선택해주세요", disabled=True)
     
     # 수량 기본값 1.0으로 설정, 1씩 증가
     quantity = st.number_input("수량", min_value=0.01, value=1.0, step=1.0)
@@ -127,13 +203,37 @@ with st.sidebar.form("trade_form"):
     submit_button = st.form_submit_button("내역 추가")
 
     if submit_button:
-        if ticker and account:
+        # 기본 검증
+        error_messages = []
+        
+        if not ticker:
+            error_messages.append("종목 코드를 입력해주세요.")
+        if not account:
+            error_messages.append("계좌명을 입력해주세요.")
+        
+        # 새 종목 입력 모드 추가 검증
+        if ticker_option == "새 종목 직접 입력":
+            if currency is None:
+                error_messages.append("결제 통화를 선택해주세요.")
+            if exposure_currency is None:
+                error_messages.append("노출통화를 선택해주세요.")
+            if asset_class is None:
+                error_messages.append("자산군을 선택해주세요.")
+            if market is None:
+                error_messages.append("시장을 선택해주세요.")
+            if multiplier <= 0.0:
+                error_messages.append("거래승수는 0보다 커야 합니다.")
+        
+        if error_messages:
+            error_text = "\n".join(f"• {msg}" for msg in error_messages)
+            st.sidebar.error(f"입력 오류:\n{error_text}")
+        else:
             # 데이터 디렉토리 확인
             if not os.path.exists("data"):
                 os.makedirs("data")
             
             # Product Master 업데이트
-            add_or_update_product(ticker, asset_class, market, currency, exposure_currency, multiplier)
+            add_or_update_product(ticker, asset_class, market, currency, exposure_currency, multiplier, name=company_name, tags=tags_input)
             
             # CSV에 추가
             add_trade(
@@ -150,8 +250,6 @@ with st.sidebar.form("trade_form"):
             )
             st.sidebar.success(f"[{account}] {ticker} {quantity}주 {trade_type} 추가 완료!")
             st.rerun() # 앱 새로고침
-        else:
-            st.sidebar.error("계좌명과 종목 코드를 모두 입력해주세요.")
 
 # --- 메인 화면 ---
 col_title, col_btn = st.columns([4, 1])
@@ -167,14 +265,23 @@ exchange_rate = get_exchange_rate()
 # 전체 원화 환산 모드로 고정
 is_krw_mode = True
 
-col_acc = st.columns(1)[0]
-with col_acc:
+col_filters = st.columns([1, 1, 2]) # 1/4, 1/4, 나머지
+with col_filters[0]:
     # 계좌 필터
     account_list = ["전체 계좌"] + existing_accounts
     selected_account = st.selectbox("조회할 계좌 선택", account_list)
 
+with col_filters[1]:
+    all_tags = ["전체 태그"] + get_all_tags()
+    selected_tag = st.selectbox("조회할 태그 선택", all_tags)
+
 # 포트폴리오 데이터 계산 (선택된 계좌 필터 적용)
-df = calculate_portfolio(selected_account)
+# 태그 선택 시 계좌는 '전체 계좌'로 고정
+if selected_tag != "전체 태그":
+    df = calculate_portfolio("전체 계좌", selected_tag)
+else:
+    df = calculate_portfolio(selected_account)
+
 
 if not df.empty:
     # 항상 원화 환산으로 표시
@@ -237,13 +344,19 @@ if not df.empty:
             )
             holdings_df.loc[holdings_df["asset_class"] == "선물", 'weight'] = 0.0
             
-            # 화면 표시용 데이터프레임 정리 (companyName 추가)
+            # 화면 표시용 데이터프레임 정리 (companyName, tags 추가)
+            if "tags" in holdings_df.columns:
+                holdings_df["tags_str"] = holdings_df["tags"].apply(lambda x: ", ".join(x) if isinstance(x, list) else "")
+            else:
+                holdings_df["tags_str"] = ""
+
             show_df = holdings_df[
                 [
                     "ticker",
                     "companyName",
-                    "currency",
-                    "exposure_currency",
+                    "tags_str",
+                    # "currency", # 결제통화 삭제
+                    # "exposure_currency", # 노출통화 삭제
                     "asset_class",
                     "currentQuantity",
                     "averageCost",
@@ -257,12 +370,13 @@ if not df.empty:
                     "realizedPnl",
                     "weight",
                 ]
-            ]
+            ].copy()
             show_df.columns = [
                 "종목코드",
                 "종목명",
-                "결제통화",
-                "노출통화",
+                "태그",
+                # "결제통화", # 결제통화 삭제
+                # "노출통화", # 노출통화 삭제
                 "자산군",
                 "보유수량",
                 "평균단가",
@@ -288,9 +402,10 @@ if not df.empty:
                     return f"{val:,.0f}"
             
             # 평균단가, 현재가, 전일가를 통화별로 포맷팅하여 문자열로 변환
-            for col in ["평균단가", "현재가", "전일가"]:
-                show_df[col] = show_df.apply(
-                    lambda row: format_price_by_currency(row[col], row["결제통화"]), 
+            for col_idx, col_name in enumerate(["평균단가", "현재가", "전일가"]):
+                # show_df는 결제통화 컬럼이 없으므로, holdings_df에서 원본 currency를 가져와 사용
+                show_df[col_name] = show_df.apply(
+                    lambda row: format_price_by_currency(row[col_name], holdings_df.loc[row.name, "currency"]),
                     axis=1
                 )
             
@@ -424,6 +539,62 @@ if not df.empty:
                     )
                 else:
                     st.info("노출통화별 집계할 평가금액이 없습니다.")
+            
+            # 태그별 자산 비중 섹션 추가
+            st.markdown(
+                "<h3 style='font-size: 1.1rem; margin-top: 30px; margin-bottom: 10px;'>태그별 자산 비중</h3>",
+                unsafe_allow_html=True,
+            )
+            st.caption(
+                "조각 크기·비중은 그룹별 순평가액의 절대값 합으로 표시합니다. 표의 평가액(원)은 부호 있는 순액입니다."
+            )
+            
+            # tags_str 컬럼을 사용하여 태그별 그룹화
+            if "tags_str" in holdings_df.columns and not holdings_df["tags_str"].empty:
+                # 각 태그별 평가액 합산 (하나의 종목이 여러 태그를 가질 수 있으므로 개별 태그로 분리하여 합산)
+                tag_values = []
+                for idx, row in holdings_df.iterrows():
+                    if row["tags_str"]:
+                        for tag in row["tags"]:
+                            tag_values.append({"tag": tag, "currentValueKrw": row["currentValueKrw"]})
+                
+                if tag_values:
+                    by_tag = pd.DataFrame(tag_values).groupby("tag", as_index=False)["currentValueKrw"].sum()
+                    by_tag = by_tag.rename(columns={"currentValueKrw": "평가액_원"})
+                    by_tag["_slice"] = by_tag["평가액_원"].abs()
+                    by_tag = by_tag[by_tag["_slice"] > 1e-9]
+                    denom_t = float(by_tag["_slice"].sum())
+                    by_tag["비중(%)"] = by_tag["_slice"] / denom_t * 100 if denom_t > 0 else 0.0
+
+                    if not by_tag.empty:
+                        fig_t = px.pie(
+                            by_tag,
+                            values="_slice",
+                            names="tag",
+                            title="태그별 자산 비중 (원화)",
+                            custom_data=["평가액_원"],
+                        )
+                        fig_t.update_traces(
+                            texttemplate="<b>%{label}</b><br>₩%{customdata[0]:,.0f}<br>%{percent}",
+                            textinfo="text",
+                            textposition="inside",
+                            insidetextorientation="horizontal",
+                            hoverinfo="skip",
+                        )
+                        st.plotly_chart(fig_t, width='stretch')
+                        show_t = by_tag[["tag", "평가액_원", "비중(%)"]].copy()
+                        show_t.columns = ["태그", "평가액(원)", "비중(%)"]
+                        st.dataframe(
+                            show_t.style.format({"평가액(원)": "{:,.0f}", "비중(%)": "{:,.1f}%"}),
+                            width='stretch',
+                        )
+                    else:
+                        st.info("태그별 집계할 평가금액이 없습니다.")
+                else:
+                    st.info("태그별 집계할 평가금액이 없습니다.")
+            else:
+                st.info("표시할 태그 정보가 없습니다. 매매 내역에 태그를 추가해보세요!")
+
         else:
             st.info("현재 보유 중인 주식이 없습니다. 사이드바에서 매수 내역을 추가해보세요!")
 
