@@ -86,7 +86,8 @@ if ticker:
     st.sidebar.info(f"**{company_name} ({ticker})**\n\n현재가: {current_price:,.0f}")
 
 trade_form_fx_default = get_exchange_rate()
-with st.sidebar.form("trade_form"):
+# form 대신 container 사용 (엔터키 자동 제출 방지)
+with st.sidebar.container():
     trade_date = st.date_input("매매 일자", date.today())
     trade_type = st.selectbox("매매 종류", ["매수", "매도"])
     
@@ -207,65 +208,73 @@ with st.sidebar.form("trade_form"):
         # 새 종목 입력 모드에서 결제통화가 선택되지 않은 경우
         st.text_input("매매 당시 환율 (1 USD = ? KRW)", value="", placeholder="결제 통화를 먼저 선택해주세요", disabled=True)
     
-    # 수량 기본값 1.0으로 설정, 1씩 증가
-    quantity = st.number_input("수량", min_value=0.01, value=1.0, step=1.0, key="quantity_input")
-    
-    # 단가 기본값을 현재가로 설정 (현재가가 없으면 0.01)
-    default_price = float(current_price) if current_price >= 0.01 else 0.01
-    price = st.number_input("단가", min_value=0.01, value=default_price, step=1.0, key="price_input")
-    
     st.divider()
-    st.caption("⚠️ 아래 '내역 추가' 버튼을 클릭해야 매매 내역이 저장됩니다")
-    submit_button = st.form_submit_button("✅ 내역 추가", type="primary", use_container_width=True)
+    
+    # 수량, 단가 입력
+    st.markdown("**📊 거래 수량 및 단가**")
+    qty_col, price_col = st.columns(2)
+    
+    with qty_col:
+        quantity = st.number_input("수량", min_value=0.01, value=1.0, step=1.0, key="quantity_input")
+    
+    with price_col:
+        default_price = float(current_price) if current_price >= 0.01 else 0.01
+        price = st.number_input("단가", min_value=0.01, value=default_price, step=1.0, key="price_input")
+    
+    # 내역 추가 버튼
+    st.divider()
+    st.caption("⚠️ 아래 '내역 추가' 버튼을 클릭해야만 매매 내역이 저장됩니다")
+    submit_button = st.button("✅ 내역 추가", type="primary", use_container_width=True)
 
-    if submit_button:
-        # 기본 검증
-        error_messages = []
+if submit_button:
+    # 기본 검증
+    error_messages = []
+    
+    if not ticker:
+        error_messages.append("종목 코드를 입력해주세요.")
+    if not account:
+        error_messages.append("계좌명을 입력해주세요.")
+    
+    # 새 종목 입력 모드 추가 검증
+    if ticker_option == "새 종목 직접 입력":
+        if currency is None:
+            error_messages.append("결제 통화를 선택해주세요.")
+        if exposure_currency is None:
+            error_messages.append("노출통화를 선택해주세요.")
+        if asset_class is None:
+            error_messages.append("자산군을 선택해주세요.")
+        if market is None:
+            error_messages.append("시장을 선택해주세요.")
+        if multiplier <= 0.0:
+            error_messages.append("거래승수는 0보다 커야 합니다.")
+    
+    if error_messages:
+        error_text = "\n".join(f"• {msg}" for msg in error_messages)
+        st.sidebar.error(f"입력 오류:\n{error_text}")
+    else:
+        # 데이터 디렉토리 확인
+        if not os.path.exists("data"):
+            os.makedirs("data")
         
-        if not ticker:
-            error_messages.append("종목 코드를 입력해주세요.")
-        if not account:
-            error_messages.append("계좌명을 입력해주세요.")
-        
-        # 새 종목 입력 모드 추가 검증
+        # Product Master 업데이트 (새 종목인 경우)
         if ticker_option == "새 종목 직접 입력":
-            if currency is None:
-                error_messages.append("결제 통화를 선택해주세요.")
-            if exposure_currency is None:
-                error_messages.append("노출통화를 선택해주세요.")
-            if asset_class is None:
-                error_messages.append("자산군을 선택해주세요.")
-            if market is None:
-                error_messages.append("시장을 선택해주세요.")
-            if multiplier <= 0.0:
-                error_messages.append("거래승수는 0보다 커야 합니다.")
-        
-        if error_messages:
-            error_text = "\n".join(f"• {msg}" for msg in error_messages)
-            st.sidebar.error(f"입력 오류:\n{error_text}")
-        else:
-            # 데이터 디렉토리 확인
-            if not os.path.exists("data"):
-                os.makedirs("data")
-            
-            # Product Master 업데이트
             add_or_update_product(ticker, asset_class, market, currency, exposure_currency, multiplier, name=company_name, tags=tags_input)
-            
-            # CSV에 추가
-            add_trade(
-                trade_date,
-                account,
-                ticker,
-                trade_type,
-                quantity,
-                price,
-                currency,
-                fx_krw_per_usd=trade_fx_krw_per_usd,
-                exposure_currency=exposure_currency,
-                asset_class=asset_class,
-            )
-            st.sidebar.success(f"[{account}] {ticker} {quantity}주 {trade_type} 추가 완료!")
-            st.rerun() # 앱 새로고침
+        
+        # CSV에 추가
+        add_trade(
+            trade_date,
+            account,
+            ticker,
+            trade_type,
+            quantity,
+            price,
+            currency,
+            fx_krw_per_usd=trade_fx_krw_per_usd,
+            exposure_currency=exposure_currency,
+            asset_class=asset_class,
+        )
+        st.sidebar.success(f"[{account}] {ticker} {quantity}주 {trade_type} 추가 완료!")
+        st.rerun()  # 앱 새로고침
 
 # --- 메인 화면 ---
 col_title, col_btn = st.columns([4, 1])
@@ -458,7 +467,7 @@ if not df.empty:
             
             st.dataframe(
                 styled_df, 
-                use_container_width=True,
+                width='stretch',
                 column_config={
                     "종목명": st.column_config.TextColumn(
                         "종목명",
