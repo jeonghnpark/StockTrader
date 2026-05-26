@@ -301,8 +301,7 @@ _LS_T2101_CACHE = {}  # shcode -> (monotonic_ts, outblock dict | None)
 
 def _get_ls_t2101_cached(shcode):
     """
-    t2111(신규) / t2101(구버전) 선물 API 캐시
-    병행 기간 동안 t2111 우선, 실패 시 t2101로 자동 재시도
+    t2111 선물 API 캐시
     """
     now = time.monotonic()
     if shcode in _LS_T2101_CACHE:
@@ -310,8 +309,8 @@ def _get_ls_t2101_cached(shcode):
         if now - ts < _LS_T1101_CACHE_TTL_SEC:
             return data
 
-    # t2111 우선, 실패 시 t2101 재시도
-    data = ls_t2101.get_future_current_price_with_fallback(shcode)
+    # t2111로 직접 조회
+    data = ls_t2101.get_future_current_price(shcode)
     _LS_T2101_CACHE[shcode] = (now, data)
     return data
 

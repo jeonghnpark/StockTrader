@@ -62,14 +62,28 @@ else:
         "단가는 KRW/USD(원화 환율)이며, 매도를 먼저 넣어도 됩니다."
     )
 
-# 종목이 선택/입력되면 현재가 표시
+# 종목이 선택/입력되면 현재가 표시 (한 번만 조회)
 current_price = 0.0
 product_info = None
 if ticker:
-    company_name = get_company_name(ticker)
-    current_price = get_current_price(ticker)
-    st.sidebar.info(f"**{company_name} ({ticker})**\n\n현재가: {current_price:,.0f}") # 현재가도 소수점 버림
-    product_info = get_product(ticker)
+    # 세션 스테이트에 저장된 티커와 다르면 새로 조회
+    if 'last_ticker' not in st.session_state or st.session_state.last_ticker != ticker:
+        company_name = get_company_name(ticker)
+        current_price = get_current_price(ticker)
+        product_info = get_product(ticker)
+        
+        # 세션에 저장
+        st.session_state.last_ticker = ticker
+        st.session_state.last_company_name = company_name
+        st.session_state.last_current_price = current_price
+        st.session_state.last_product_info = product_info
+    else:
+        # 저장된 값 사용
+        company_name = st.session_state.last_company_name
+        current_price = st.session_state.last_current_price
+        product_info = st.session_state.last_product_info
+    
+    st.sidebar.info(f"**{company_name} ({ticker})**\n\n현재가: {current_price:,.0f}")
 
 trade_form_fx_default = get_exchange_rate()
 with st.sidebar.form("trade_form"):
@@ -194,13 +208,15 @@ with st.sidebar.form("trade_form"):
         st.text_input("매매 당시 환율 (1 USD = ? KRW)", value="", placeholder="결제 통화를 먼저 선택해주세요", disabled=True)
     
     # 수량 기본값 1.0으로 설정, 1씩 증가
-    quantity = st.number_input("수량", min_value=0.01, value=1.0, step=1.0)
+    quantity = st.number_input("수량", min_value=0.01, value=1.0, step=1.0, key="quantity_input")
     
     # 단가 기본값을 현재가로 설정 (현재가가 없으면 0.01)
     default_price = float(current_price) if current_price >= 0.01 else 0.01
-    price = st.number_input("단가", min_value=0.01, value=default_price, step=1.0)
+    price = st.number_input("단가", min_value=0.01, value=default_price, step=1.0, key="price_input")
     
-    submit_button = st.form_submit_button("내역 추가")
+    st.divider()
+    st.caption("⚠️ 아래 '내역 추가' 버튼을 클릭해야 매매 내역이 저장됩니다")
+    submit_button = st.form_submit_button("✅ 내역 추가", type="primary", use_container_width=True)
 
     if submit_button:
         # 기본 검증
@@ -352,8 +368,8 @@ if not df.empty:
 
             show_df = holdings_df[
                 [
-                    "ticker",
                     "companyName",
+                    "ticker",
                     "tags_str",
                     # "currency", # 결제통화 삭제
                     # "exposure_currency", # 노출통화 삭제
@@ -372,8 +388,8 @@ if not df.empty:
                 ]
             ].copy()
             show_df.columns = [
-                "종목코드",
                 "종목명",
+                "종목코드",
                 "태그",
                 # "결제통화", # 결제통화 삭제
                 # "노출통화", # 노출통화 삭제
@@ -440,7 +456,17 @@ if not df.empty:
                         subset=pd.IndexSlice[:, col]
                     )
             
-            st.dataframe(styled_df, width='stretch')
+            st.dataframe(
+                styled_df, 
+                use_container_width=True,
+                column_config={
+                    "종목명": st.column_config.TextColumn(
+                        "종목명",
+                        width="medium",
+                        pinned=True  # 종목명 컬럼 고정
+                    )
+                }
+            )
             
             # 파이 차트 (보유 비중) — USDKRW는 평가 0·비중 제외이므로 차트에서도 제외
             st.markdown("<h3 style='font-size: 1.1rem; margin-top: 30px; margin-bottom: 10px;'>포트폴리오 자산 비중</h3>", unsafe_allow_html=True)
@@ -695,6 +721,10 @@ if not df.empty:
         current_history_df = load_trade_history()
         
         if not current_history_df.empty:
+            # 거래일 기준 내림차순 정렬 (최근 거래가 위로)
+            current_history_df['date'] = pd.to_datetime(current_history_df['date'])
+            current_history_df = current_history_df.sort_values('date', ascending=False)
+            
             # 종목명 컬럼 추가
             current_history_df['종목명'] = current_history_df['ticker'].apply(get_company_name)
             

@@ -32,7 +32,7 @@
         "exposure_currency": "USD",
         "multiplier": 1.0,
         "tags": [
-            "채권"
+            "AI"
         ]
     },
     "131970": {
@@ -44,7 +44,7 @@
         "exposure_currency": "KRW",
         "multiplier": 1.0,
         "tags": [
-            "반도체"
+            "AI"
         ]
     },
     "200670": {
@@ -272,7 +272,7 @@
         "exposure_currency": "KRW",
         "multiplier": 1.0,
         "tags": [
-            "반도체"
+            "AI"
         ]
     },
     "360750": {
@@ -296,7 +296,7 @@
         "exposure_currency": "KRW",
         "multiplier": 1.0,
         "tags": [
-            "반도체"
+            "AI"
         ]
     },
     "005380": {
@@ -332,7 +332,7 @@
         "multiplier": 1.0,
         "name": "한화에어로스페이스",
         "tags": [
-            "항공우주"
+            "AI"
         ]
     },
     "034020": {
@@ -369,6 +369,30 @@
         "name": "미국달러 F 202606",
         "tags": [
             "선물"
+        ]
+    },
+    "RKLB": {
+        "ticker": "RKLB",
+        "asset_class": "개별주식",
+        "market": "NASDAQ",
+        "settlement_currency": "USD",
+        "exposure_currency": "USD",
+        "multiplier": 1.0,
+        "name": "Rocket Lab Corporation",
+        "tags": [
+            "항공우주"
+        ]
+    },
+    "010120": {
+        "ticker": "010120",
+        "asset_class": "개별주식",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0,
+        "name": "LS ELECTRIC",
+        "tags": [
+            "에너지"
         ]
     }
 }
