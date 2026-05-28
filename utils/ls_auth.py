@@ -21,9 +21,46 @@ APP_FUTURES_SECRET_TEST = os.getenv("EBEST-OPEN-API-SECRET-KEY-FUTURES-TEST")
 
 # EBEST-OPEN-API-APP-KEY-TEST=PS0af8zqmwco4ntPCnVLY2txiatbP375EdqI
 # EBEST-OPEN-API-SECRET-KEY-TEST=tUGQ3cvnoEaJ3oHigBpLgpI8lKyt6To6
+EBEST_OPEN_API_APP_KEY = os.getenv("EBEST-OPEN-API-APP-KEY")
+EBEST_OPEN_API_SECRET_KEY = os.getenv("EBEST-OPEN-API-SECRET-KEY")
 
 cached_token_futures = None
 token_expiry_futures = None
+
+
+def get_token_foreign_stock():
+
+    global cached_token_futures, token_expiry_futures
+    now = datetime.now()
+    if cached_token_futures and token_expiry_futures and token_expiry_futures > now:
+        return cached_token_futures
+
+    url = "https://openapi.ls-sec.co.kr:8080/oauth2/token"
+    headers = {"content-type": "application/x-www-form-urlencoded"}
+    params = {
+        "appkey": EBEST_OPEN_API_APP_KEY,
+        "appsecretkey": EBEST_OPEN_API_SECRET_KEY,
+        "grant_type": "client_credentials",
+        "scope": "oob",
+    }
+
+    request = requests.post(url, data=params, headers=headers, timeout=30)
+    response_data = request.json()
+
+    if "access_token" not in response_data:
+        logger.error(
+            "LS token response: %s status=%s", response_data, request.status_code
+        )
+        raise ValueError(
+            f"LS API 응답에 access_token이 없습니다. .env 키를 확인하세요. 응답: {response_data}"
+        )
+
+    new_token = response_data["access_token"]
+    cached_token_futures = new_token
+    expiry_in = int(response_data.get("expires_in", 3600))
+    token_expiry_futures = now + timedelta(seconds=max(60, expiry_in - 120))
+
+    return new_token
 
 
 def get_token_futures():
