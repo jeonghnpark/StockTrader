@@ -21,11 +21,15 @@ G3101_MIN_INTERVAL_SEC = 0.34
 
 def get_current(symbol, exchange="NASDAQ"):
     """
-    g3101OutBlock dict 반환. 실패 시 None.
+    현재가(float) 반환. 실패 시 None.
 
     Parameters:
     - symbol: 해외 주식 티커 (예: TSLA, AAPL) - 대문자로 자동 변환
-    - exchange: 거래소 명 ("NASDAQ" 또는 "NYSE"), 기본값 "NASDAQ" (기타는 에러 발생)
+    - exchange: 거래소 명 ("NASDAQ" 또는 "NYSE"), 기본값 "NASDAQ"
+
+    Returns:
+    - float: 현재가 (성공)
+    - None: 실패 또는 응답 코드 오류
     """
 
     symbol = str(symbol).strip().upper()
@@ -66,10 +70,26 @@ def get_current(symbol, exchange="NASDAQ"):
         res.raise_for_status()
         res_json = res.json()
 
+        # 최상위 레벨의 응답 코드 확인 (0000 = 성공)
+        if res_json.get("rsp_cd") != "00000":
+            logger.warning(
+                "g3101: rsp_cd error for %s: %s", symbol, res_json.get("rsp_cd")
+            )
+            return None
+
         if f"{TR}OutBlock" not in res_json:
             logger.error("g3101: OutBlock not found: %s", res_json)
             return None
-        return res_json[f"{TR}OutBlock"]
-    except (RequestException, JSONDecodeError, KeyError) as e:
-        logger.error("g3101 call error: %s", e)
+
+        out_block = res_json[f"{TR}OutBlock"]
+
+        # 현재가 추출
+        price_str = out_block.get("price", "").strip()
+        if not price_str or price_str == "0":
+            logger.warning("g3101: no price for %s", symbol)
+            return None
+
+        return float(price_str)
+    except (RequestException, JSONDecodeError, KeyError, ValueError) as e:
+        logger.error("g3101 call error for %s: %s", symbol, e)
         return None

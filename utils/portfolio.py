@@ -5,7 +5,7 @@ import time
 import pandas as pd
 import yfinance as yf
 
-from utils import ls_t1101, ls_t2101
+from utils import ls_t1101, ls_t2101, ls_g3101
 from utils.product_master import get_product
 
 CSV_FILE = "data/trade_history.csv"
@@ -41,8 +41,6 @@ def _normalize_asset_class(val):
     return s if s in ASSET_CLASS_OPTIONS else LEGACY_DEFAULT_ASSET_CLASS
 
 
-
-
 def _apply_futures_trade(q_old, cost_basis_krw, dq, price, multiplier=1.0):
     """
     선물: 매수 +dq(롱), 매도 -dq(숏). 양방향 포지션 가능.
@@ -53,17 +51,17 @@ def _apply_futures_trade(q_old, cost_basis_krw, dq, price, multiplier=1.0):
     # 입력된 수량에 승수를 곱해서 실제 수량으로 변환
     dq_actual = dq * multiplier
     realized = 0.0
-    
+
     if abs(q_old) < 1e-12:
         # 포지션이 없던 상태 → 새로 오픈
         return dq_actual, dq_actual * price, realized
-    
+
     avg = cost_basis_krw / q_old
-    
+
     if q_old * dq_actual > 0:
         # 같은 방향 추가 (롱에 롱 추가, 숏에 숏 추가)
         return q_old + dq_actual, cost_basis_krw + dq_actual * price, realized
-    
+
     # 반대 방향 거래 (기존 포지션을 청산하는 경우)
     c = min(abs(q_old), abs(dq_actual))
     if q_old > 0:
@@ -72,16 +70,16 @@ def _apply_futures_trade(q_old, cost_basis_krw, dq, price, multiplier=1.0):
     else:
         # 숏 포지션 청산 (매수로 청산)
         realized += (avg - price) * c
-    
+
     q_new = q_old + dq_actual
     if abs(q_new) < 1e-12:
         # 포지션 전부 청산
         return 0.0, 0.0, realized
-    
+
     if (q_new > 0) == (q_old > 0):
         # 같은 방향으로 남음 (롱 또는 숏)
         return q_new, avg * q_new, realized
-    
+
     # 반대 방향 포지션으로 전환
     return q_new, q_new * price, realized
 
@@ -90,9 +88,9 @@ def _is_future_ticker(ticker):
     """선물 여부 판별 (8자리 코드 or product_master에서 asset_class='선물')"""
     ticker_str = str(ticker).strip().upper()
     product_info = get_product(ticker_str)
-    return (product_info and product_info.get("asset_class") == "선물") or len(ticker_str) == 8
-
-
+    return (product_info and product_info.get("asset_class") == "선물") or len(
+        ticker_str
+    ) == 8
 
 
 def load_trade_history():
@@ -316,38 +314,49 @@ def _get_ls_t2101_cached(shcode):
 
 
 def get_current_price(ticker):
-    """현재가 조회. 국내: LS API → .KS 재시도 → 해외(yfinance)"""
+    """현재가 조회. product_master 기반 데이터 소스 선택
+
+    - market='KRX', asset_class='선물': LS t2101 (국내 선물)
+    - market='KRX', asset_class='개별주식': LS t1101 (국내 주식)
+    - market='NYSE'/'NASDAQ', asset_class='개별주식': LS g3101 (미국 주식)
+    - 기타: yfinance 폴백
+    """
 
     ticker_str = str(ticker).strip().upper()
     product_info = get_product(ticker_str)
-    is_future = (product_info and product_info.get("asset_class") == "선물") or len(
-        ticker_str
-    ) == 8
 
-    if is_future:
-        ob = _get_ls_t2101_cached(ticker_str)
-        price = _ls_price_to_float(ob)
-        if price > 0:
-            return price
+    # product_master에서 정보 추출
+    if product_info:
+        market = product_info.get("market", "").upper()
+        asset_class = product_info.get("asset_class", "")
 
-    shcode = _ls_shcode_from_ticker(ticker_str)
-    if shcode:
-        ob = _get_ls_t1101_cached(shcode)
-        price = _ls_price_to_float(ob)
-        if price > 0:  # 성공
-            return price
-        # LS API 실패 → 해외주식으로 처리
+        # 1. 국내 선물 (KRX + 선물)
+        if market == "KRX":
+            if asset_class == "선물":
+                ob = _get_ls_t2101_cached(ticker_str)
+                price = _ls_price_to_float(ob)
+                if price >= 0:
+                    return price
+            else:  # 2. 국내 주식 (KRX + 개별주식)
+                shcode = _ls_shcode_from_ticker(ticker_str)
+                if shcode:
+                    ob = _get_ls_t1101_cached(shcode)
+                    price = _ls_price_to_float(ob)
+                    if price >= 0:
+                        return price
 
-    try:
-        # print(f"{ticker_str} is being retrieved from yfinance (LS API failed)")
-        stock = yf.Ticker(ticker_str)
-        todays_data = stock.history(period="1d")
-        if not todays_data.empty:
-            return float(todays_data["Close"].iloc[0])
-        return 0.0
-    except Exception as e:
-        logger.warning("Error fetching price for %s: %s", ticker_str, e)
-        return 0.0
+        # 3. 미국 주식 (NYSE/NASDAQ + 개별주식)
+        elif market in ("NYSE", "NASDAQ"):
+            try:
+                price = ls_g3101.get_current(ticker_str, exchange=market)
+                if price and price >= 0:
+                    return price
+            except Exception as e:
+                logger.warning("LS g3101 error for %s (%s): %s", ticker_str, market, e)
+
+    # yfinance로 풀백하지 않고 0으로 리턴하며 warning 로그를 남김
+    logger.warning("No valid price source for %s, returning 0.0", ticker_str)
+    return 0.0
 
 
 def get_previous_close_price(ticker):
@@ -393,7 +402,7 @@ def get_company_name(ticker):
 
     ticker_str = str(ticker).strip().upper()
     product_info = get_product(ticker_str)
-    
+
     # 1. product_master.json에서 name 필드 확인 (최우선)
     if product_info and product_info.get("name"):
         name = str(product_info["name"]).strip()
@@ -456,9 +465,11 @@ def calculate_portfolio(account_filter=None, tag_filter=None):
     if tag_filter and tag_filter != "전체 태그":
         # product_master에서 해당 태그를 가진 종목들의 티커를 가져옵니다.
         from utils.product_master import load_product_master
+
         products = load_product_master()
         tickers_with_tag = [
-            t for t, info in products.items() 
+            t
+            for t, info in products.items()
             if "tags" in info and tag_filter in info["tags"]
         ]
         df = df[df["ticker"].isin(tickers_with_tag)]
@@ -501,15 +512,16 @@ def calculate_portfolio(account_filter=None, tag_filter=None):
             portfolio[ticker]["exposure_currency"] = exp
             portfolio[ticker]["asset_class"] = ac
 
-
         # 선물 처리 (양방향 포지션 가능)
         if _is_future_ticker(ticker):
             dq = quantity if tradeType in ["Buy", "매수"] else -quantity
             q_old = portfolio[ticker]["currentQuantity"]
             cost_old = portfolio[ticker]["totalCostKrw"]
             product_info = get_product(ticker)
-            multiplier = float(product_info.get("multiplier", 1.0)) if product_info else 1.0
-            
+            multiplier = (
+                float(product_info.get("multiplier", 1.0)) if product_info else 1.0
+            )
+
             qn, cn, r = _apply_futures_trade(q_old, cost_old, dq, price, multiplier)
             portfolio[ticker]["currentQuantity"] = qn
             portfolio[ticker]["totalCostKrw"] = cn
@@ -526,7 +538,7 @@ def calculate_portfolio(account_filter=None, tag_filter=None):
         # 매수 처리 (한글/영문 모두 지원) - 선물 제외
         if tradeType in ["Buy", "매수"]:
             portfolio[ticker]["currentQuantity"] += quantity
-            
+
             if currency == "KRW":
                 portfolio[ticker]["totalCostKrw"] += quantity * price
                 q = portfolio[ticker]["currentQuantity"]
@@ -633,14 +645,13 @@ def calculate_portfolio(account_filter=None, tag_filter=None):
         if abs(r["currentQuantity"]) < 1e-12:
             return 0.0
 
-
         if r["asset_class"] == "선물":
             # 선물: 수량이 이미 승수가 반영됨
             return (r["currentPrice"] - r["averageCostKrw"]) * r["currentQuantity"]
-            
+
         if r["currency"] == "USD":
             return r["currentValueKrw"] - r["totalCostKrw"]
-            
+
         return r["unrealizedPnl"]
 
     result_df["unrealizedPnlKrw"] = result_df.apply(row_unrealized_krw, axis=1)
@@ -689,8 +700,10 @@ def calculate_portfolio(account_filter=None, tag_filter=None):
 
         if r["asset_class"] == "선물":
             # 선물: 수량이 이미 승수가 반영됨
-            return (r["previousClosePrice"] - r["averageCostKrw"]) * r["currentQuantity"]
-            
+            return (r["previousClosePrice"] - r["averageCostKrw"]) * r[
+                "currentQuantity"
+            ]
+
         if r["currency"] == "USD":
             prev_value_krw = r["previousClosePrice"] * spot
             return (prev_value_krw - r["averageCostKrw"]) * r["currentQuantity"]
@@ -715,7 +728,7 @@ def calculate_portfolio(account_filter=None, tag_filter=None):
 
     # USDKRW(선물·헤지): 평가「금액」만 0으로 두어 총자산·비중·차트에 반영하지 않음.
     # 평가손익은 MTM 그대로, 수익률은 의미 없어 0% 표시.
-    
+
     # 선물 포지션도 평가「금액」만 0으로 (명목 가치를 자산에서 제외)
     _futures = result_df["asset_class"] == "선물"
     result_df.loc[_futures, "currentValue"] = 0.0
