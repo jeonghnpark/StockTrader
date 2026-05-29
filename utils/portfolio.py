@@ -5,7 +5,7 @@ import time
 import pandas as pd
 import yfinance as yf
 
-from utils import ls_t1101, ls_t2101, ls_g3101
+from utils import ls_t1101, ls_t2101, ls_g3101, ls_g3106
 from utils.product_master import get_product
 
 CSV_FILE = "data/trade_history.csv"
@@ -13,6 +13,10 @@ _NAME_CACHE = {}  # 종목명 캐싱용 딕셔너리
 # LS t1101 응답 캐시 (동일 종목 연속 조회·Streamlit 재실행 시 과도한 API 방지)
 _LS_T1101_CACHE = {}  # shcode -> (monotonic_ts, outblock dict | None)
 _LS_T1101_CACHE_TTL_SEC = 60.0
+_LS_G3101_CACHE = {}  # symbol -> (ts, data)
+_LS_G3101_CACHE_TTL_SEC = 60.0
+_LS_G3106_CACHE = {}  # symbol -> (ts, data)
+_LS_G3106_CACHE_TTL_SEC = 60.0
 
 logger = logging.getLogger(__name__)
 
@@ -264,7 +268,7 @@ def _ls_price_to_float(outblock):
 
 
 def _ls_previous_close_to_float(outblock):
-    """t1101 응답에서 전일 종가(jnilclose) 추출"""
+    """LS API 응답에서 전일 종가(jnilclose) 추출"""
     if not outblock:
         return 0.0
     p = outblock.get("jnilclose")
@@ -295,6 +299,29 @@ def _get_ls_t1101_cached(shcode):
 
 
 _LS_T2101_CACHE = {}  # shcode -> (monotonic_ts, outblock dict | None)
+
+
+def _get_ls_g3101_cached(symbol):
+    now = time.monotonic()
+    if symbol in _LS_G3101_CACHE:
+        ts, data = _LS_G3101_CACHE[symbol]
+        if now - ts < _LS_G3101_CACHE_TTL_SEC:
+            return data
+    data = ls_g3101.get_current(symbol)
+    _LS_G3101_CACHE[symbol] = (now, data)
+    return data
+
+
+def _get_ls_g3106_cached(symbol, exchange="NASDAQ"):
+    now = time.monotonic()
+    cache_key = f"{symbol}_{exchange}"
+    if cache_key in _LS_G3106_CACHE:
+        ts, data = _LS_G3106_CACHE[cache_key]
+        if now - ts < _LS_G3106_CACHE_TTL_SEC:
+            return data
+    data = ls_g3106.get_current(symbol, exchange=exchange)
+    _LS_G3106_CACHE[cache_key] = (now, data)
+    return data
 
 
 def _get_ls_t2101_cached(shcode):
@@ -348,11 +375,13 @@ def get_current_price(ticker):
         # 3. 미국 주식 (NYSE/NASDAQ + 개별주식)
         elif market in ("NYSE", "NASDAQ"):
             try:
-                price = ls_g3101.get_current(ticker_str, exchange=market)
-                if price and price >= 0:
-                    return price
+                ob = _get_ls_g3106_cached(ticker_str, exchange=market)
+                if ob:
+                    price = float(ob.get("price", 0))
+                    if price >= 0:
+                        return price
             except Exception as e:
-                logger.warning("LS g3101 error for %s (%s): %s", ticker_str, market, e)
+                logger.warning("LS g3106 error for %s (%s): %s", ticker_str, market, e)
 
     # yfinance로 풀백하지 않고 0으로 리턴하며 warning 로그를 남김
     logger.warning("No valid price source for %s, returning 0.0", ticker_str)
@@ -360,42 +389,52 @@ def get_current_price(ticker):
 
 
 def get_previous_close_price(ticker):
-    """전일 종가 반환. 국내: LS API → .KS 재시도 → 해외(yfinance)"""
+    """전일 종가 반환. product_master 기반 데이터 소스 선택
+
+    - market='KRX', asset_class='선물': LS t2111 (국내 선물)
+    - market='KRX', asset_class='개별주식': LS t1101 (국내 주식)
+    - market='NYSE'/'NASDAQ', asset_class='개별주식': LS g3106 (미국 주식)
+    - 기타: 0.0 반환
+    """
 
     ticker_str = str(ticker).strip().upper()
     product_info = get_product(ticker_str)
-    is_future = (product_info and product_info.get("asset_class") == "선물") or len(
-        ticker_str
-    ) == 8
 
-    if is_future:
-        ob = _get_ls_t2101_cached(ticker_str)
-        price = _ls_previous_close_to_float(ob)
-        if price > 0:
-            return price
+    if product_info:
+        market = product_info.get("market", "").upper()
+        asset_class = product_info.get("asset_class", "")
 
-    shcode = _ls_shcode_from_ticker(ticker_str)
-    if shcode:
-        ob = _get_ls_t1101_cached(shcode)
-        price = _ls_previous_close_to_float(ob)
-        if price > 0:  # 성공
-            return price
-        # LS API 실패 → 해외주식으로 처리
+        # 1. 국내 선물 (KRX + 선물)
+        if market == "KRX":
+            if asset_class == "선물":
+                ob = _get_ls_t2101_cached(ticker_str)
+                price = _ls_previous_close_to_float(ob)
+                if price > 0:
+                    return price
+            else:  # 2. 국내 주식 (KRX + 개별주식 등)
+                shcode = _ls_shcode_from_ticker(ticker_str)
+                if shcode:
+                    ob = _get_ls_t1101_cached(shcode)
+                    price = _ls_previous_close_to_float(ob)
+                    if price > 0:
+                        return price
 
-    # yfinance로 해외주식 전일 종가 조회
-    try:
-        stock = yf.Ticker(ticker_str)
-        hist = stock.history(period="5d")  # 5일 데이터로 전일자 가져오기
-        if len(hist) >= 2:
-            return float(hist["Close"].iloc[-2])  # 최신 바로 이전이 전일자
-        return 0.0
-    except Exception as e:
-        logger.warning("Error fetching previous close for %s: %s", ticker_str, e)
-        return 0.0
+        # 3. 미국 주식 (NYSE/NASDAQ)
+        elif market in ("NYSE", "NASDAQ"):
+            try:
+                ob = _get_ls_g3106_cached(ticker_str, exchange=market)
+                price = _ls_previous_close_to_float(ob)
+                if price > 0:
+                    return price
+            except Exception as e:
+                logger.warning("LS g3106 error for %s (%s): %s", ticker_str, market, e)
+
+    logger.warning("No valid previous close source for %s, returning 0.0", ticker_str)
+    return 0.0
 
 
 def get_company_name(ticker):
-    """종목 코드로 회사 이름. product_master → 국내: LS API → .KS 재시도 → 해외(yfinance) → 코드 반환"""
+    """종목 코드로 회사 이름. product_master.json의 name 사용, 없으면 티커 반환."""
 
     if ticker in _NAME_CACHE:
         return _NAME_CACHE[ticker]
@@ -403,42 +442,14 @@ def get_company_name(ticker):
     ticker_str = str(ticker).strip().upper()
     product_info = get_product(ticker_str)
 
-    # 1. product_master.json에서 name 필드 확인 (최우선)
     if product_info and product_info.get("name"):
         name = str(product_info["name"]).strip()
         if name:
             _NAME_CACHE[ticker] = name
             return name
 
-    is_future = (product_info and product_info.get("asset_class") == "선물") or len(
-        ticker_str
-    ) == 8
-
-    if is_future:
-        ob = _get_ls_t2101_cached(ticker_str)
-        if ob and ob.get("hname"):
-            name = str(ob["hname"]).strip()
-            _NAME_CACHE[ticker] = name
-            return name
-
-    shcode = _ls_shcode_from_ticker(ticker_str)
-    if shcode:
-        ob = _get_ls_t1101_cached(shcode)
-        if ob and ob.get("hname"):
-            name = str(ob["hname"]).strip()
-            _NAME_CACHE[ticker] = name
-            return name
-        # LS API 실패 → 해외주식으로 처리
-
-    try:
-        stock = yf.Ticker(ticker_str)
-        info = stock.info
-        name = info.get("shortName") or info.get("longName") or ticker_str
-    except Exception:
-        name = ticker_str
-
-    _NAME_CACHE[ticker] = name
-    return name
+    _NAME_CACHE[ticker] = ticker_str
+    return ticker_str
 
 
 def get_exchange_rate():

@@ -55,18 +55,21 @@ def get_current_with_fallback(shcode="005930"):
     2차 시도: shcode.KS 붙여서 재시도 (일부 ETF 등 필요)
     """
     shcode = str(shcode).strip()
-    
+
     # 1차 시도
     result = get_current(shcode)
     if result is not None:
         return result
-    
+
     # 2차 시도: .KS 붙여서 재시도
-    if not shcode.endswith('.KS') and not shcode.endswith('.KQ'):
-        logger.warning("t1101: First attempt failed for %s, retrying with .KS suffix", shcode)
+    if not shcode.endswith(".KS") and not shcode.endswith(".KQ"):
+        logger.warning(
+            "t1101: First attempt failed for %s, retrying with .KS suffix", shcode
+        )
         result = get_current(f"{shcode}.KS")
+        print("\nKS를 붙여야함!!!!!!!!!!!!!!!!!!!!!!!!! real? \n")
         if result is not None:
             return result
-    
+
     logger.error("t1101: All attempts failed for %s", shcode)
     return None

@@ -1,4 +1,4 @@
-"""LS Open API g3101 — 해외주식 API 현재가 조회"""
+"""LS Open API g3106 해외주식 API 현재가호가 조회."""
 
 import json
 import logging
@@ -12,11 +12,11 @@ from utils.ls_auth import api_manager, get_token_futures, get_token_foreign_stoc
 
 logger = logging.getLogger(__name__)
 
-TR = "g3101"
+TR = "g3106"
 BASE_URL = "https://openapi.ls-sec.co.kr:8080"
 PATH = "overseas-stock/market-data"
 URL = f"{BASE_URL}/{PATH}"
-G3101_MIN_INTERVAL_SEC = 0.34
+G3106_MIN_INTERVAL_SEC = 0.34
 
 
 def get_current(symbol, exchange="NASDAQ"):
@@ -64,7 +64,7 @@ def get_current(symbol, exchange="NASDAQ"):
         }
     }
 
-    api_manager.wait_for_next_call(TR, G3101_MIN_INTERVAL_SEC)
+    api_manager.wait_for_next_call(TR, G3106_MIN_INTERVAL_SEC)
     try:
         res = requests.post(URL, headers=header, data=json.dumps(body), timeout=30)
         res.raise_for_status()
@@ -73,12 +73,12 @@ def get_current(symbol, exchange="NASDAQ"):
         # 최상위 레벨의 응답 코드 확인 (0000 = 성공)
         if res_json.get("rsp_cd") != "00000":
             logger.warning(
-                "g3101: rsp_cd error for %s: %s", symbol, res_json.get("rsp_cd")
+                "g3106: rsp_cd error for %s: %s", symbol, res_json.get("rsp_cd")
             )
             return None
 
         if f"{TR}OutBlock" not in res_json:
-            logger.error("g3101: OutBlock not found: %s", res_json)
+            logger.error("g3106: OutBlock not found: %s", res_json)
             return None
 
         return res_json[f"{TR}OutBlock"]
@@ -92,5 +92,5 @@ def get_current(symbol, exchange="NASDAQ"):
 
         # return float(price_str)
     except (RequestException, JSONDecodeError, KeyError, ValueError) as e:
-        logger.error("g3101 call error for %s: %s", symbol, e)
+        logger.error("g3106 call error for %s: %s", symbol, e)
         return None
