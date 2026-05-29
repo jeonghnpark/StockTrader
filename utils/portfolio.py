@@ -17,6 +17,9 @@ _LS_G3101_CACHE = {}  # symbol -> (ts, data)
 _LS_G3101_CACHE_TTL_SEC = 60.0
 _LS_G3106_CACHE = {}  # symbol -> (ts, data)
 _LS_G3106_CACHE_TTL_SEC = 60.0
+# 티커별 (현재가, 전일가) — 동일 OutBlock에서 한 번에 추출
+_QUOTE_CACHE = {}  # ticker -> (monotonic_ts, (current, previous_close))
+_QUOTE_CACHE_TTL_SEC = 60.0
 
 logger = logging.getLogger(__name__)
 
@@ -340,97 +343,85 @@ def _get_ls_t2101_cached(shcode):
     return data
 
 
-def get_current_price(ticker):
-    """현재가 조회. product_master 기반 데이터 소스 선택
+def _get_quote_outblock(ticker_str: str, product_info: dict):
+    """product_master 기준으로 시세 OutBlock 1회 조회 (캐시된 LS API)."""
+    if not product_info:
+        return None
 
-    - market='KRX', asset_class='선물': LS t2101 (국내 선물)
-    - market='KRX', asset_class='개별주식': LS t1101 (국내 주식)
-    - market='NYSE'/'NASDAQ', asset_class='개별주식': LS g3101 (미국 주식)
-    - 기타: yfinance 폴백
+    market = product_info.get("market", "").upper()
+    asset_class = product_info.get("asset_class", "")
+
+    if market == "KRX":
+        if asset_class == "선물":
+            return _get_ls_t2101_cached(ticker_str)
+        shcode = _ls_shcode_from_ticker(ticker_str)
+        if shcode:
+            return _get_ls_t1101_cached(shcode)
+        return None
+
+    if market in ("NYSE", "NASDAQ"):
+        try:
+            return _get_ls_g3106_cached(ticker_str, exchange=market)
+        except Exception as e:
+            logger.warning(
+                "LS g3106 error for %s (%s): %s", ticker_str, market, e
+            )
+        return None
+
+    return None
+
+
+def get_quote(ticker):
+    """현재가·전일 종가를 한 번의 API(또는 캐시) 조회로 반환.
+
+    Returns:
+        tuple[float, float]: (current_price, previous_close_price)
     """
-
     ticker_str = str(ticker).strip().upper()
+    now = time.monotonic()
+    if ticker_str in _QUOTE_CACHE:
+        ts, quote = _QUOTE_CACHE[ticker_str]
+        if now - ts < _QUOTE_CACHE_TTL_SEC:
+            return quote
+
     product_info = get_product(ticker_str)
+    ob = _get_quote_outblock(ticker_str, product_info)
 
-    # product_master에서 정보 추출
-    if product_info:
-        market = product_info.get("market", "").upper()
-        asset_class = product_info.get("asset_class", "")
+    if ob:
+        current = _ls_price_to_float(ob)
+        previous = _ls_previous_close_to_float(ob)
+        if current < 0:
+            current = 0.0
+        if previous < 0:
+            previous = 0.0
+        quote = (current, previous)
+    else:
+        if product_info:
+            logger.warning("No valid quote source for %s, returning (0.0, 0.0)", ticker_str)
+        quote = (0.0, 0.0)
 
-        # 1. 국내 선물 (KRX + 선물)
-        if market == "KRX":
-            if asset_class == "선물":
-                ob = _get_ls_t2101_cached(ticker_str)
-                price = _ls_price_to_float(ob)
-                if price >= 0:
-                    return price
-            else:  # 2. 국내 주식 (KRX + 개별주식)
-                shcode = _ls_shcode_from_ticker(ticker_str)
-                if shcode:
-                    ob = _get_ls_t1101_cached(shcode)
-                    price = _ls_price_to_float(ob)
-                    if price >= 0:
-                        return price
+    _QUOTE_CACHE[ticker_str] = (now, quote)
+    return quote
 
-        # 3. 미국 주식 (NYSE/NASDAQ + 개별주식)
-        elif market in ("NYSE", "NASDAQ"):
-            try:
-                ob = _get_ls_g3106_cached(ticker_str, exchange=market)
-                if ob:
-                    price = float(ob.get("price", 0))
-                    if price >= 0:
-                        return price
-            except Exception as e:
-                logger.warning("LS g3106 error for %s (%s): %s", ticker_str, market, e)
 
-    # yfinance로 풀백하지 않고 0으로 리턴하며 warning 로그를 남김
-    logger.warning("No valid price source for %s, returning 0.0", ticker_str)
-    return 0.0
+def get_current_price(ticker):
+    """현재가 조회. get_quote() 사용 (동일 티커는 전일가와 API 1회 공유)."""
+    return get_quote(ticker)[0]
 
 
 def get_previous_close_price(ticker):
-    """전일 종가 반환. product_master 기반 데이터 소스 선택
+    """전일 종가 조회. get_quote() 사용 (동일 티커는 현재가와 API 1회 공유)."""
+    return get_quote(ticker)[1]
 
-    - market='KRX', asset_class='선물': LS t2111 (국내 선물)
-    - market='KRX', asset_class='개별주식': LS t1101 (국내 주식)
-    - market='NYSE'/'NASDAQ', asset_class='개별주식': LS g3106 (미국 주식)
-    - 기타: 0.0 반환
+
+def prefetch_quotes(tickers):
+    """여러 티커의 (현재가, 전일가)를 티커당 get_quote 1회로 조회.
+
+    Returns:
+        dict[str, tuple[float, float]]: ticker -> (current_price, previous_close_price)
     """
-
-    ticker_str = str(ticker).strip().upper()
-    product_info = get_product(ticker_str)
-
-    if product_info:
-        market = product_info.get("market", "").upper()
-        asset_class = product_info.get("asset_class", "")
-
-        # 1. 국내 선물 (KRX + 선물)
-        if market == "KRX":
-            if asset_class == "선물":
-                ob = _get_ls_t2101_cached(ticker_str)
-                price = _ls_previous_close_to_float(ob)
-                if price > 0:
-                    return price
-            else:  # 2. 국내 주식 (KRX + 개별주식 등)
-                shcode = _ls_shcode_from_ticker(ticker_str)
-                if shcode:
-                    ob = _get_ls_t1101_cached(shcode)
-                    price = _ls_previous_close_to_float(ob)
-                    if price > 0:
-                        return price
-
-        # 3. 미국 주식 (NYSE/NASDAQ)
-        elif market in ("NYSE", "NASDAQ"):
-            try:
-                ob = _get_ls_g3106_cached(ticker_str, exchange=market)
-                price = _ls_previous_close_to_float(ob)
-                if price > 0:
-                    return price
-            except Exception as e:
-                logger.warning("LS g3106 error for %s (%s): %s", ticker_str, market, e)
-
-    logger.warning("No valid previous close source for %s, returning 0.0", ticker_str)
-    return 0.0
+    unique = sorted({str(t).strip().upper() for t in tickers if t})
+    return {t: get_quote(t) for t in unique}
 
 
 def get_company_name(ticker):
@@ -622,13 +613,18 @@ def calculate_portfolio(account_filter=None, tag_filter=None):
     result_df = pd.DataFrame.from_dict(active_portfolio, orient="index").reset_index()
     result_df.rename(columns={"index": "ticker"}, inplace=True)
 
-    # 현재가 가져오기 (보유 수량이 있는 경우만)
-    def get_price_if_active(row):
-        if abs(row["currentQuantity"]) > 1e-12:
-            return get_current_price(row["ticker"])
-        return 0.0
+    # 티커별 시세 1회 조회 (현재가·전일가 동시 추출, 캐시 공유)
+    quote_by_ticker = prefetch_quotes(result_df["ticker"])
 
-    result_df["currentPrice"] = result_df.apply(get_price_if_active, axis=1)
+    def _current_price_for_row(row):
+        if abs(row["currentQuantity"]) < 1e-12:
+            return 0.0
+        return quote_by_ticker[row["ticker"]][0]
+
+    result_df["currentPrice"] = result_df.apply(_current_price_for_row, axis=1)
+    result_df["previousClosePrice"] = result_df["ticker"].map(
+        lambda t: quote_by_ticker[t][1]
+    )
 
     # 평가 금액(표시 통화) 및 원화 기준 지표
     def row_current_value_local(r):
@@ -698,13 +694,7 @@ def calculate_portfolio(account_filter=None, tag_filter=None):
 
     result_df["realizedPnl"] = result_df.apply(row_realized_local, axis=1)
 
-    # 전일 평가손익 계산 (현재 보유 수량 기준)
-    def row_prev_close_price(r):
-        return get_previous_close_price(r["ticker"])
-
-    result_df["previousClosePrice"] = result_df.apply(row_prev_close_price, axis=1)
-
-    # 전일 평가손익 (원화 기준) - 현재 보유 수량으로 전일 가격 계산
+    # 전일 평가손익 (previousClosePrice는 위 quote_by_ticker에서 이미 설정됨)
     def row_prev_unrealized_krw(r):
         if abs(r["currentQuantity"]) < 1e-12:
             return 0.0
