@@ -5,7 +5,7 @@ import time
 import pandas as pd
 import yfinance as yf
 
-from utils import ls_t1101, ls_t2101, ls_g3101, ls_g3106
+from utils import ls_t1101, ls_t2111, ls_g3101, ls_g3106
 from utils.product_master import get_product
 
 CSV_FILE = "data/trade_history.csv"
@@ -338,7 +338,7 @@ def _get_ls_t2101_cached(shcode):
             return data
 
     # t2111로 직접 조회
-    data = ls_t2101.get_future_current_price(shcode)
+    data = ls_t2111.get_future_current_price(shcode)
     _LS_T2101_CACHE[shcode] = (now, data)
     return data
 

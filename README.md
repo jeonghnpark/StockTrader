@@ -99,7 +99,7 @@ StockTrader/
 └── utils/
     ├── portfolio.py               # 포트폴리오 계산 로직
     ├── ls_t1101.py               # LS증권 국내주식 API
-    ├── ls_t2101.py               # LS증권 선물 API
+    ├── ls_t2111.py               # LS증권 선물 API
     └── product_master.py         # 종목 마스터 데이터 관리
 ```
 

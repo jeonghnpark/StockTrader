@@ -16,7 +16,7 @@ LS증권에서 선물/옵션 TR 자릿수 확대 및 기존 TR 삭제 공고에 
 - **변경 내용**: 가격 필드의 자릿수 확대, InBlock/OutBlock 구조는 동일
 
 ### 코드 반영 현황
-✅ **utils/ls_t2101.py** - 완전 리팩토링
+✅ **utils/ls_t2111.py** - 완전 리팩토링
 - `get_future_current_price(shcode, use_new_tr=True)`: t2111/t2101 선택 함수
 - `get_future_current_price_with_fallback(shcode)`: t2111 우선, t2101 재시도 (자동 페일오버)
 
@@ -25,13 +25,13 @@ LS증권에서 선물/옵션 TR 자릿수 확대 및 기존 TR 삭제 공고에 
 
 ### 사용 방법
 ```python
-from utils import ls_t2101
+from utils import ls_t2111
 
 # 1. 신규 TR(t2111) 직접 사용
-result = ls_t2101.get_future_current_price("101S9000", use_new_tr=True)
+result = ls_t2111.get_future_current_price("101S9000", use_new_tr=True)
 
 # 2. 자동 페일오버 (권장)
-result = ls_t2101.get_future_current_price_with_fallback("101S9000")
+result = ls_t2111.get_future_current_price_with_fallback("101S9000")
 
 # 3. portfolio.py 내부에서 자동 사용됨
 ```
@@ -162,7 +162,7 @@ nav = float(str(nav).replace(",", "").strip())
 ## 7. 버전 관리
 
 ### 변경 파일
-- `utils/ls_t2101.py`: 신규 함수 추가 (기존 함수 호환성 유지)
+- `utils/ls_t2111.py`: 신규 함수 추가 (기존 함수 호환성 유지)
 - `utils/portfolio.py`: _get_ls_t2101_cached() 업데이트
 - `utils/ls_t1901.py`: 신규 파일 작성
 
