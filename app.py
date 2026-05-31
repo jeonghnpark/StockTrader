@@ -340,7 +340,8 @@ if not df.empty:
     col2.metric("총 평가 손익", format_currency(total_unrealized_pnl), f"{pnl_pct:,.0f}%")
     
     # 총 평가손익(당일)을 총 평가 손익 옆에 배치
-    col3.metric("총 평가손익(당일)", format_currency(total_pnl_change))
+    daily_pnl_pct = (total_pnl_change / total_value * 100) if total_value > 0 else 0.0
+    col3.metric("총 평가손익(당일)", format_currency(total_pnl_change), f"{daily_pnl_pct:,.2f}%")
     
     col4.metric("총 실현 손익", format_currency(total_realized_pnl))
     
@@ -396,6 +397,10 @@ if not df.empty:
                     "weight",
                 ]
             ].copy()
+            
+            # 총손익 계산 (평가손익(누적) + 매매손익)
+            show_df["totalPnl"] = show_df["unrealizedPnl"] + show_df["realizedPnl"]
+            
             show_df.columns = [
                 "종목명",
                 "종목코드",
@@ -415,6 +420,9 @@ if not df.empty:
                 "매매손익",
                 "비중(%)",
             ]
+            
+            # 컬럼명 다시 매핑 (totalPnl 추가)
+            show_df = show_df.rename(columns={"totalPnl": "총손익"})
             
             # 통화별 단가/가격 포맷팅 함수
             def format_price_by_currency(val, currency):
@@ -443,6 +451,7 @@ if not df.empty:
                 '평가손익(누적)': '{:,.0f}',
                 '누적수익률(%)': '{:,.0f}%',
                 '매매손익': '{:,.0f}',
+                '총손익': '{:,.0f}',
                 '비중(%)': '{:,.0f}%'
             }
             
@@ -457,7 +466,7 @@ if not df.empty:
             styled_df = show_df.style.format(format_dict)
             
             # 음수값이 있는 컬럼들에 대해 음수 하이라이팅 적용
-            negative_columns = ['변동률(당일)', '평가손익(당일)', '평가손익(누적)', '누적수익률(%)', '매매손익']
+            negative_columns = ['변동률(당일)', '평가손익(당일)', '평가손익(누적)', '누적수익률(%)', '매매손익', '총손익']
             for col in negative_columns:
                 if col in show_df.columns:
                     styled_df = styled_df.map(
@@ -477,8 +486,230 @@ if not df.empty:
                 }
             )
             
-            # 파이 차트 (보유 비중) — USDKRW는 평가 0·비중 제외이므로 차트에서도 제외
-            st.markdown("<h3 style='font-size: 1.1rem; margin-top: 30px; margin-bottom: 10px;'>포트폴리오 자산 비중</h3>", unsafe_allow_html=True)
+            # 4개의 Bar 차트 추가 (당일손익률, 당일손익금액, 누적손익률, 누적손익)
+            st.markdown("<h3 style='font-size: 1.1rem; margin-top: 30px; margin-bottom: 10px;'>손익 분석</h3>", unsafe_allow_html=True)
+            
+            # 차트용 데이터 준비 (선물 제외, 보유수량 > 0)
+            chart_data = holdings_df[
+                (holdings_df["asset_class"] != "선물") & 
+                (holdings_df["currentQuantity"] > 0)
+            ].copy()
+            
+            if not chart_data.empty:
+                chart_data = chart_data.sort_values('companyName').reset_index(drop=True)
+                
+                # 1. 당일손익률 상위/하위 5위
+                col_chart1, col_chart2 = st.columns(2)
+                
+                with col_chart1:
+                    st.markdown("**당일손익률 상위 5위**")
+                    top_daily_rate = chart_data.nlargest(5, 'pnlChangeRate')[['companyName', 'pnlChangeRate']].copy()
+                    top_daily_rate = top_daily_rate.sort_values('pnlChangeRate', ascending=True)
+                    if not top_daily_rate.empty:
+                        fig1 = px.bar(
+                            top_daily_rate,
+                            y='companyName',
+                            x='pnlChangeRate',
+                            orientation='h',
+                            labels={'companyName': '종목명', 'pnlChangeRate': '당일손익률(%)'},
+                            color='pnlChangeRate',
+                            color_continuous_scale=['red', 'green'],
+                        )
+                        fig1.update_layout(
+                            height=300,
+                            showlegend=False,
+                            margin=dict(l=20, r=20, t=20, b=20),
+                        )
+                        fig1.update_xaxes(title_text='당일손익률(%)')
+                        fig1.update_yaxes(title_text='')
+                        st.plotly_chart(fig1, use_container_width=True)
+                    else:
+                        st.caption("표시할 데이터가 없습니다.")
+                
+                with col_chart2:
+                    st.markdown("**당일손익률 하위 5위**")
+                    bottom_daily_rate = chart_data.nsmallest(5, 'pnlChangeRate')[['companyName', 'pnlChangeRate']].copy()
+                    bottom_daily_rate = bottom_daily_rate.sort_values('pnlChangeRate', ascending=False)
+                    if not bottom_daily_rate.empty:
+                        fig2 = px.bar(
+                            bottom_daily_rate,
+                            y='companyName',
+                            x='pnlChangeRate',
+                            orientation='h',
+                            labels={'companyName': '종목명', 'pnlChangeRate': '당일손익률(%)'},
+                            color='pnlChangeRate',
+                            color_continuous_scale=['red', 'green'],
+                        )
+                        fig2.update_layout(
+                            height=300,
+                            showlegend=False,
+                            margin=dict(l=20, r=20, t=20, b=20),
+                        )
+                        fig2.update_xaxes(title_text='당일손익률(%)')
+                        fig2.update_yaxes(title_text='')
+                        st.plotly_chart(fig2, use_container_width=True)
+                    else:
+                        st.caption("표시할 데이터가 없습니다.")
+                
+                # 2. 당일손익금액 상위/하위 5위
+                col_chart3, col_chart4 = st.columns(2)
+                
+                with col_chart3:
+                    st.markdown("**당일손익금액 상위 5위**")
+                    top_daily_pnl = chart_data.nlargest(5, 'pnlChangeKrw')[['companyName', 'pnlChangeKrw']].copy()
+                    top_daily_pnl = top_daily_pnl.sort_values('pnlChangeKrw', ascending=True)
+                    if not top_daily_pnl.empty:
+                        fig3 = px.bar(
+                            top_daily_pnl,
+                            y='companyName',
+                            x='pnlChangeKrw',
+                            orientation='h',
+                            labels={'companyName': '종목명', 'pnlChangeKrw': '당일손익금액(₩)'},
+                            color='pnlChangeKrw',
+                            color_continuous_scale=['red', 'green'],
+                        )
+                        fig3.update_layout(
+                            height=300,
+                            showlegend=False,
+                            margin=dict(l=20, r=20, t=20, b=20),
+                        )
+                        fig3.update_xaxes(title_text='당일손익금액(₩)')
+                        fig3.update_yaxes(title_text='')
+                        st.plotly_chart(fig3, use_container_width=True)
+                    else:
+                        st.caption("표시할 데이터가 없습니다.")
+                
+                with col_chart4:
+                    st.markdown("**당일손익금액 하위 5위**")
+                    bottom_daily_pnl = chart_data.nsmallest(5, 'pnlChangeKrw')[['companyName', 'pnlChangeKrw']].copy()
+                    bottom_daily_pnl = bottom_daily_pnl.sort_values('pnlChangeKrw', ascending=False)
+                    if not bottom_daily_pnl.empty:
+                        fig4 = px.bar(
+                            bottom_daily_pnl,
+                            y='companyName',
+                            x='pnlChangeKrw',
+                            orientation='h',
+                            labels={'companyName': '종목명', 'pnlChangeKrw': '당일손익금액(₩)'},
+                            color='pnlChangeKrw',
+                            color_continuous_scale=['red', 'green'],
+                        )
+                        fig4.update_layout(
+                            height=300,
+                            showlegend=False,
+                            margin=dict(l=20, r=20, t=20, b=20),
+                        )
+                        fig4.update_xaxes(title_text='당일손익금액(₩)')
+                        fig4.update_yaxes(title_text='')
+                        st.plotly_chart(fig4, use_container_width=True)
+                    else:
+                        st.caption("표시할 데이터가 없습니다.")
+                
+                # 3. 누적손익률 상위/하위 5위
+                col_chart5, col_chart6 = st.columns(2)
+                
+                with col_chart5:
+                    st.markdown("**누적손익률 상위 5위**")
+                    top_cumul_rate = chart_data.nlargest(5, 'returnRate')[['companyName', 'returnRate']].copy()
+                    top_cumul_rate = top_cumul_rate.sort_values('returnRate', ascending=True)
+                    if not top_cumul_rate.empty:
+                        fig5 = px.bar(
+                            top_cumul_rate,
+                            y='companyName',
+                            x='returnRate',
+                            orientation='h',
+                            labels={'companyName': '종목명', 'returnRate': '누적손익률(%)'},
+                            color='returnRate',
+                            color_continuous_scale=['red', 'green'],
+                        )
+                        fig5.update_layout(
+                            height=300,
+                            showlegend=False,
+                            margin=dict(l=20, r=20, t=20, b=20),
+                        )
+                        fig5.update_xaxes(title_text='누적손익률(%)')
+                        fig5.update_yaxes(title_text='')
+                        st.plotly_chart(fig5, use_container_width=True)
+                    else:
+                        st.caption("표시할 데이터가 없습니다.")
+                
+                with col_chart6:
+                    st.markdown("**누적손익률 하위 5위**")
+                    bottom_cumul_rate = chart_data.nsmallest(5, 'returnRate')[['companyName', 'returnRate']].copy()
+                    bottom_cumul_rate = bottom_cumul_rate.sort_values('returnRate', ascending=False)
+                    if not bottom_cumul_rate.empty:
+                        fig6 = px.bar(
+                            bottom_cumul_rate,
+                            y='companyName',
+                            x='returnRate',
+                            orientation='h',
+                            labels={'companyName': '종목명', 'returnRate': '누적손익률(%)'},
+                            color='returnRate',
+                            color_continuous_scale=['red', 'green'],
+                        )
+                        fig6.update_layout(
+                            height=300,
+                            showlegend=False,
+                            margin=dict(l=20, r=20, t=20, b=20),
+                        )
+                        fig6.update_xaxes(title_text='누적손익률(%)')
+                        fig6.update_yaxes(title_text='')
+                        st.plotly_chart(fig6, use_container_width=True)
+                    else:
+                        st.caption("표시할 데이터가 없습니다.")
+                
+                # 4. 누적손익금액 상위/하위 5위
+                col_chart7, col_chart8 = st.columns(2)
+                
+                with col_chart7:
+                    st.markdown("**누적손익금액 상위 5위**")
+                    top_cumul_pnl = chart_data.nlargest(5, 'unrealizedPnl')[['companyName', 'unrealizedPnl']].copy()
+                    top_cumul_pnl = top_cumul_pnl.sort_values('unrealizedPnl', ascending=True)
+                    if not top_cumul_pnl.empty:
+                        fig7 = px.bar(
+                            top_cumul_pnl,
+                            y='companyName',
+                            x='unrealizedPnl',
+                            orientation='h',
+                            labels={'companyName': '종목명', 'unrealizedPnl': '누적손익금액(₩)'},
+                            color='unrealizedPnl',
+                            color_continuous_scale=['red', 'green'],
+                        )
+                        fig7.update_layout(
+                            height=300,
+                            showlegend=False,
+                            margin=dict(l=20, r=20, t=20, b=20),
+                        )
+                        fig7.update_xaxes(title_text='누적손익금액(₩)')
+                        fig7.update_yaxes(title_text='')
+                        st.plotly_chart(fig7, use_container_width=True)
+                    else:
+                        st.caption("표시할 데이터가 없습니다.")
+                
+                with col_chart8:
+                    st.markdown("**누적손익금액 하위 5위**")
+                    bottom_cumul_pnl = chart_data.nsmallest(5, 'unrealizedPnl')[['companyName', 'unrealizedPnl']].copy()
+                    bottom_cumul_pnl = bottom_cumul_pnl.sort_values('unrealizedPnl', ascending=False)
+                    if not bottom_cumul_pnl.empty:
+                        fig8 = px.bar(
+                            bottom_cumul_pnl,
+                            y='companyName',
+                            x='unrealizedPnl',
+                            orientation='h',
+                            labels={'companyName': '종목명', 'unrealizedPnl': '누적손익금액(₩)'},
+                            color='unrealizedPnl',
+                            color_continuous_scale=['red', 'green'],
+                        )
+                        fig8.update_layout(
+                            height=300,
+                            showlegend=False,
+                            margin=dict(l=20, r=20, t=20, b=20),
+                        )
+                        fig8.update_xaxes(title_text='누적손익금액(₩)')
+                        fig8.update_yaxes(title_text='')
+                        st.plotly_chart(fig8, use_container_width=True)
+                    else:
+                        st.caption("표시할 데이터가 없습니다.")
+            
             pie_base = holdings_df[holdings_df["asset_class"] != "선물"]
             if pie_base.empty:
                 st.caption("표시할 일반 보유 자산이 없습니다.")
