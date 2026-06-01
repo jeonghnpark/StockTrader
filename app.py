@@ -4,7 +4,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import date
 import os
-from utils.ls_t3521 import get_price_and_change_rate
+from utils.ls_t3521 import get_price_and_change_rate as get_overseas_macro_quote
+from utils.ls_t1511 import get_price_and_change_rate as get_domestic_index_quote
 from utils.portfolio import (
     load_trade_history,
     add_trade,
@@ -120,14 +121,25 @@ def _render_rank_chart_pair(
 
 @st.cache_data(ttl=30, show_spinner=False)
 def _get_macro_snapshot():
-    targets = [
+    snapshot = []
+
+    for upcode, label in [("101", "코스피"), ("301", "코스닥")]:
+        price, change_rate = get_domestic_index_quote(upcode)
+        snapshot.append(
+            {
+                "label": label,
+                "symbol": upcode,
+                "price": price,
+                "change_rate": change_rate,
+            }
+        )
+
+    for kind, symbol, label in [
         ("S", "SPI@SPX", "S&P 500"),
         ("S", "NAS@IXIC", "나스닥 종합"),
         ("R", "USDKRWSMBS", "원/달러"),
-    ]
-    snapshot = []
-    for kind, symbol, label in targets:
-        price, change_rate = get_price_and_change_rate(kind, symbol)
+    ]:
+        price, change_rate = get_overseas_macro_quote(kind, symbol)
         snapshot.append(
             {
                 "label": label,
@@ -136,14 +148,13 @@ def _get_macro_snapshot():
                 "change_rate": change_rate,
             }
         )
+
     return snapshot
 
 
-def _format_macro_price(symbol, price):
+def _format_macro_price(price):
     if price is None:
         return "-"
-    if symbol == "USDKRWSMBS":
-        return f"{price:,.2f}"
     return f"{price:,.2f}"
 
 
@@ -413,8 +424,8 @@ with col_btn:
     if st.button("🔄 현재가 업데이트"):
         st.rerun()
 
-macro_col1, macro_col2, macro_col3 = st.columns(3)
-for col, item in zip((macro_col1, macro_col2, macro_col3), _get_macro_snapshot()):
+macro_cols = st.columns(5)
+for col, item in zip(macro_cols, _get_macro_snapshot()):
     delta_text = (
         f"{item['change_rate']:.2f}%"
         if item["change_rate"] is not None
@@ -423,7 +434,7 @@ for col, item in zip((macro_col1, macro_col2, macro_col3), _get_macro_snapshot()
     with col:
         st.metric(
             f"{item['label']} ({item['symbol']})",
-            _format_macro_price(item["symbol"], item["price"]),
+            _format_macro_price(item["price"]),
             delta_text,
         )
 

@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 from json.decoder import JSONDecodeError
 
 import requests
@@ -16,6 +17,8 @@ BASE_URL = "https://openapi.ls-sec.co.kr:8080"
 PATH = "stock/investinfo"
 URL = f"{BASE_URL}/{PATH}"
 T3521_MIN_INTERVAL_SEC = 0.34
+_CACHE = {}  # kind:symbol -> (monotonic_ts, outblock dict | None)
+_CACHE_TTL_SEC = 30.0
 
 
 def _to_float(value):
@@ -59,6 +62,13 @@ def get_current(kind, symbol):
     if not symbol:
         raise ValueError("symbol 값이 비어 있습니다.")
 
+    cache_key = f"{kind}:{symbol}"
+    now = time.monotonic()
+    if cache_key in _CACHE:
+        ts, data = _CACHE[cache_key]
+        if now - ts < _CACHE_TTL_SEC:
+            return data
+
     access_token = get_token_foreign_stock()
     header = {
         "content-type": "application/json; charset=utf-8",
@@ -88,16 +98,20 @@ def get_current(kind, symbol):
                 symbol,
                 res_json.get("rsp_cd"),
             )
+            _CACHE[cache_key] = (time.monotonic(), None)
             return None
 
         out_block = res_json.get(f"{TR}OutBlock")
         if not isinstance(out_block, dict):
             logger.error("t3521: OutBlock not found: %s", res_json)
+            _CACHE[cache_key] = (time.monotonic(), None)
             return None
 
+        _CACHE[cache_key] = (time.monotonic(), out_block)
         return out_block
     except (RequestException, JSONDecodeError, ValueError) as exc:
         logger.error("t3521 call error for %s/%s: %s", kind, symbol, exc)
+        _CACHE[cache_key] = (time.monotonic(), None)
         return None
 
 

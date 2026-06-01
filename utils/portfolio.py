@@ -12,14 +12,14 @@ CSV_FILE = "data/trade_history.csv"
 _NAME_CACHE = {}  # 종목명 캐싱용 딕셔너리
 # LS t1101 응답 캐시 (동일 종목 연속 조회·Streamlit 재실행 시 과도한 API 방지)
 _LS_T1101_CACHE = {}  # shcode -> (monotonic_ts, outblock dict | None)
-_LS_T1101_CACHE_TTL_SEC = 60.0
+_LS_T1101_CACHE_TTL_SEC = 30.0
 _LS_G3101_CACHE = {}  # symbol -> (ts, data)
-_LS_G3101_CACHE_TTL_SEC = 60.0
+_LS_G3101_CACHE_TTL_SEC = 30.0
 _LS_G3106_CACHE = {}  # symbol -> (ts, data)
-_LS_G3106_CACHE_TTL_SEC = 60.0
+_LS_G3106_CACHE_TTL_SEC = 30.0
 # 티커별 (현재가, 전일가) — 동일 OutBlock에서 한 번에 추출
 _QUOTE_CACHE = {}  # ticker -> (monotonic_ts, (current, previous_close))
-_QUOTE_CACHE_TTL_SEC = 60.0
+_QUOTE_CACHE_TTL_SEC = 30.0
 
 logger = logging.getLogger(__name__)
 
