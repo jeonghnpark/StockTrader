@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import date
 import os
+from utils.ls_t3521 import get_price_and_change_rate
 from utils.portfolio import (
     load_trade_history,
     add_trade,
@@ -115,6 +116,35 @@ def _render_rank_chart_pair(
             st.plotly_chart(fig_bottom, use_container_width=True)
         else:
             st.caption("표시할 데이터가 없습니다.")
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _get_macro_snapshot():
+    targets = [
+        ("S", "SPI@SPX", "S&P 500"),
+        ("S", "NAS@IXIC", "나스닥 종합"),
+        ("R", "USDKRWSMBS", "원/달러"),
+    ]
+    snapshot = []
+    for kind, symbol, label in targets:
+        price, change_rate = get_price_and_change_rate(kind, symbol)
+        snapshot.append(
+            {
+                "label": label,
+                "symbol": symbol,
+                "price": price,
+                "change_rate": change_rate,
+            }
+        )
+    return snapshot
+
+
+def _format_macro_price(symbol, price):
+    if price is None:
+        return "-"
+    if symbol == "USDKRWSMBS":
+        return f"{price:,.2f}"
+    return f"{price:,.2f}"
 
 
 # 페이지 기본 설정
@@ -382,6 +412,22 @@ with col_title:
 with col_btn:
     if st.button("🔄 현재가 업데이트"):
         st.rerun()
+
+macro_col1, macro_col2, macro_col3 = st.columns(3)
+for col, item in zip((macro_col1, macro_col2, macro_col3), _get_macro_snapshot()):
+    delta_text = (
+        f"{item['change_rate']:.2f}%"
+        if item["change_rate"] is not None
+        else "-"
+    )
+    with col:
+        st.metric(
+            f"{item['label']} ({item['symbol']})",
+            _format_macro_price(item["symbol"], item["price"]),
+            delta_text,
+        )
+
+st.divider()
 
 # 환율 가져오기
 exchange_rate = get_exchange_rate()
