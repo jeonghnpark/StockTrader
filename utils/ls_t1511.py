@@ -16,7 +16,7 @@ TR = "t1511"
 BASE_URL = "https://openapi.ls-sec.co.kr:8080"
 PATH = "indtp/market-data"
 URL = f"{BASE_URL}/{PATH}"
-T1511_MIN_INTERVAL_SEC = 0.34
+T1511_MIN_INTERVAL_SEC = 0.12
 _CACHE = {}  # upcode -> (monotonic_ts, outblock dict | None)
 _CACHE_TTL_SEC = 30.0
 

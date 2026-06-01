@@ -16,7 +16,7 @@ TR = "t3521"
 BASE_URL = "https://openapi.ls-sec.co.kr:8080"
 PATH = "stock/investinfo"
 URL = f"{BASE_URL}/{PATH}"
-T3521_MIN_INTERVAL_SEC = 0.34
+T3521_MIN_INTERVAL_SEC = 1.1
 _CACHE = {}  # kind:symbol -> (monotonic_ts, outblock dict | None)
 _CACHE_TTL_SEC = 30.0
 

@@ -16,7 +16,7 @@ TR = "g3106"
 BASE_URL = "https://openapi.ls-sec.co.kr:8080"
 PATH = "overseas-stock/market-data"
 URL = f"{BASE_URL}/{PATH}"
-G3106_MIN_INTERVAL_SEC = 0.34
+G3106_MIN_INTERVAL_SEC = 0.12
 
 
 def get_current(symbol, exchange="NASDAQ"):

@@ -15,7 +15,7 @@ TR = "t8424"
 BASE_URL = "https://openapi.ls-sec.co.kr:8080"
 PATH = "indtp/market-data"
 URL = f"{BASE_URL}/{PATH}"
-T8424_MIN_INTERVAL_SEC = 0.34
+T8424_MIN_INTERVAL_SEC = 1.1
 
 
 def get_current(gubun1=""):

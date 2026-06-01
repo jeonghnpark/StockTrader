@@ -19,7 +19,7 @@ PATH = "futureoption/market-data"
 URL = f"{BASE_URL}/{PATH}"
 
 # KRX 초당 약 3회 제한
-T2111_MIN_INTERVAL_SEC = 0.34
+T2111_MIN_INTERVAL_SEC = 0.12
 
 
 def get_future_current_price(shcode):

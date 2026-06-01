@@ -16,7 +16,7 @@ BASE_URL = "https://openapi.ls-sec.co.kr:8080"
 PATH = "stock/market-data"
 URL = f"{BASE_URL}/{PATH}"
 # KRX 초당 약 3회 제한 (simple_trading t2101 등과 동일 간격)
-T1101_MIN_INTERVAL_SEC = 0.34
+T1101_MIN_INTERVAL_SEC = 0.12
 
 
 def get_current(shcode="005930"):

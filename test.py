@@ -20,5 +20,6 @@ from utils import portfolio
 # print(prc)
 
 # 해외지수
+# prc = ls_t3521.get_price_and_change_rate("R", "USDKRWSMBS")
 prc = ls_t3521.get_price_and_change_rate("S", "NAS@IXIC")
 print(prc)

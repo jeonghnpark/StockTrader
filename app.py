@@ -99,7 +99,7 @@ def _render_rank_chart_pair(
             x_title=x_title,
         )
         if fig_top is not None:
-            st.plotly_chart(fig_top, use_container_width=True)
+            st.plotly_chart(fig_top, width="stretch")
         else:
             st.caption("표시할 데이터가 없습니다.")
 
@@ -114,7 +114,7 @@ def _render_rank_chart_pair(
             x_title=x_title,
         )
         if fig_bottom is not None:
-            st.plotly_chart(fig_bottom, use_container_width=True)
+            st.plotly_chart(fig_bottom, width="stretch")
         else:
             st.caption("표시할 데이터가 없습니다.")
 
@@ -364,7 +364,7 @@ with st.sidebar.container():
     # 내역 추가 버튼
     st.divider()
     st.caption("⚠️ 아래 '내역 추가' 버튼을 클릭해야만 매매 내역이 저장됩니다")
-    submit_button = st.button("✅ 내역 추가", type="primary", use_container_width=True)
+    submit_button = st.button("✅ 내역 추가", type="primary", width="stretch")
 
 if submit_button:
     # 기본 검증
@@ -493,11 +493,11 @@ if not df.empty:
     # 총 수익률 계산 (총 평가손익 / 총 투자원금)
     total_cost = total_value - total_unrealized_pnl
     pnl_pct = (total_unrealized_pnl / total_cost * 100) if total_cost > 0 else 0.0
-    col2.metric("총 평가 손익", format_currency(total_unrealized_pnl), f"{pnl_pct:,.0f}%")
+    col2.metric("평가손익(누적)", format_currency(total_unrealized_pnl), f"{pnl_pct:,.0f}%")
     
     # 총 평가손익(당일)을 총 평가 손익 옆에 배치
     daily_pnl_pct = (total_pnl_change / total_value * 100) if total_value > 0 else 0.0
-    col3.metric("총 평가손익(당일)", format_currency(total_pnl_change), f"{daily_pnl_pct:,.2f}%")
+    col3.metric("평가손익(당일)", format_currency(total_pnl_change), f"{daily_pnl_pct:,.2f}%")
     
     col4.metric("총 실현 손익", format_currency(total_realized_pnl))
     
