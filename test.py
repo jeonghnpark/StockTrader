@@ -1,4 +1,4 @@
-from utils import ls_g3101, ls_g3106, ls_t1101, ls_t2111, ls_t3521
+from utils import ls_g3101, ls_g3106, ls_t1101, ls_t2111, ls_t3521, ls_t1511
 from utils import portfolio
 
 
@@ -21,5 +21,9 @@ from utils import portfolio
 
 # 해외지수
 # prc = ls_t3521.get_price_and_change_rate("R", "USDKRWSMBS")
-prc = ls_t3521.get_price_and_change_rate("S", "NAS@IXIC")
+# prc = ls_t3521.get_price_and_change_rate("S", "NAS@IXIC")
+# print(prc)
+
+# 업종지수
+prc = ls_t1511.get_price_and_change_rate("001")
 print(prc)

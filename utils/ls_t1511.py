@@ -20,7 +20,7 @@ T1511_MIN_INTERVAL_SEC = 0.12
 _CACHE = {}  # upcode -> (monotonic_ts, outblock dict | None)
 _CACHE_TTL_SEC = 30.0
 
-KOSPI_UPCODE = "101"
+KOSPI_UPCODE = "001"
 KOSDAQ_UPCODE = "301"
 
 
