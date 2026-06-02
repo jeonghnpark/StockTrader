@@ -394,5 +394,17 @@
         "tags": [
             "에너지"
         ]
+    },
+    "229200": {
+        "ticker": "229200",
+        "asset_class": "지수형",
+        "market": "KRX",
+        "settlement_currency": "KRW",
+        "exposure_currency": "KRW",
+        "multiplier": 1.0,
+        "name": "KODEX 코스닥150",
+        "tags": [
+            "지수"
+        ]
     }
 }

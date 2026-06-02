@@ -343,11 +343,8 @@ def _get_ls_t2101_cached(shcode):
     return data
 
 
-def _get_quote_outblock(ticker_str: str, product_info: dict):
-    """product_master 기준으로 시세 OutBlock 1회 조회 (캐시된 LS API)."""
-    if not product_info:
-        return None
-
+def _get_quote_outblock_from_product(ticker_str: str, product_info: dict):
+    """product_master 기준으로 시세 OutBlock 1회 조회."""
     market = product_info.get("market", "").upper()
     asset_class = product_info.get("asset_class", "")
 
@@ -369,6 +366,51 @@ def _get_quote_outblock(ticker_str: str, product_info: dict):
         return None
 
     return None
+
+
+def _get_quote_outblock_heuristic(ticker_str: str):
+    """product_master 없을 때 티커 형식으로 시세 API 추정 (새 종목 입력용).
+
+    - 8자리 영숫자: 국내 선물 (t2111)
+    - 6자리(또는 1~5자리 숫자): 국내 주식/ETF (t1101)
+    - 알파벳만: 해외 주식 (g3106, NASDAQ → NYSE 순)
+    """
+    t = str(ticker_str).strip().upper()
+    if not t:
+        return None
+
+    if len(t) == 8 and t.isalnum():
+        ob = _get_ls_t2101_cached(t)
+        if ob:
+            return ob
+
+    shcode = _ls_shcode_from_ticker(t)
+    if shcode:
+        ob = _get_ls_t1101_cached(shcode)
+        if ob:
+            return ob
+
+    if t.isalpha():
+        for exchange in ("NASDAQ", "NYSE"):
+            try:
+                ob = _get_ls_g3106_cached(t, exchange=exchange)
+                if ob and _ls_price_to_float(ob) > 0:
+                    return ob
+            except Exception as e:
+                logger.warning(
+                    "LS g3106 heuristic error for %s (%s): %s", t, exchange, e
+                )
+
+    return None
+
+
+def _get_quote_outblock(ticker_str: str, product_info: dict):
+    """product_master 우선, 없거나 실패 시 티커 형식 휴리스틱 폴백."""
+    if product_info:
+        ob = _get_quote_outblock_from_product(ticker_str, product_info)
+        if ob:
+            return ob
+    return _get_quote_outblock_heuristic(ticker_str)
 
 
 def get_quote(ticker):
@@ -396,8 +438,11 @@ def get_quote(ticker):
             previous = 0.0
         quote = (current, previous)
     else:
-        if product_info:
-            logger.warning("No valid quote source for %s, returning (0.0, 0.0)", ticker_str)
+        logger.warning(
+            "No valid quote source for %s (master=%s), returning (0.0, 0.0)",
+            ticker_str,
+            bool(product_info),
+        )
         quote = (0.0, 0.0)
 
     _QUOTE_CACHE[ticker_str] = (now, quote)
@@ -424,8 +469,46 @@ def prefetch_quotes(tickers):
     return {t: get_quote(t) for t in unique}
 
 
+def _company_name_from_outblock(outblock):
+    """LS 시세 OutBlock에서 종목명 추출 (t1101 hname, g3106 korname 등)."""
+    if not outblock:
+        return None
+    for key in ("hname", "korname", "name"):
+        val = outblock.get(key)
+        if val is not None:
+            s = str(val).strip()
+            if s:
+                return s
+    return None
+
+
+def _get_company_name_from_api(ticker_str: str, product_info: dict):
+    """시세 API OutBlock에서 종목명 조회 (캐시된 quote 경로 재사용)."""
+    ob = _get_quote_outblock(ticker_str, product_info or {})
+    name = _company_name_from_outblock(ob)
+    if name:
+        return name
+
+    # 해외: 가격이 0이어도 korname만 있을 수 있음
+    if str(ticker_str).strip().upper().isalpha():
+        for exchange in ("NASDAQ", "NYSE"):
+            try:
+                ob = _get_ls_g3106_cached(ticker_str, exchange=exchange)
+                name = _company_name_from_outblock(ob)
+                if name:
+                    return name
+            except Exception as e:
+                logger.warning(
+                    "LS g3106 name lookup error for %s (%s): %s",
+                    ticker_str,
+                    exchange,
+                    e,
+                )
+    return None
+
+
 def get_company_name(ticker):
-    """종목 코드로 회사 이름. product_master.json의 name 사용, 없으면 티커 반환."""
+    """종목명: product_master → LS API(휴리스틱) → 티커 코드."""
 
     if ticker in _NAME_CACHE:
         return _NAME_CACHE[ticker]
@@ -433,11 +516,18 @@ def get_company_name(ticker):
     ticker_str = str(ticker).strip().upper()
     product_info = get_product(ticker_str)
 
-    if product_info and product_info.get("name"):
-        name = str(product_info["name"]).strip()
-        if name:
-            _NAME_CACHE[ticker] = name
-            return name
+    master_name = ""
+    if product_info:
+        master_name = str(product_info.get("name", "") or "").strip()
+    # master에 유효한 종목명이 있고 티커와 다를 때만 사용
+    if master_name and master_name != ticker_str:
+        _NAME_CACHE[ticker] = master_name
+        return master_name
+
+    api_name = _get_company_name_from_api(ticker_str, product_info)
+    if api_name:
+        _NAME_CACHE[ticker] = api_name
+        return api_name
 
     _NAME_CACHE[ticker] = ticker_str
     return ticker_str

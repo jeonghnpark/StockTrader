@@ -269,13 +269,10 @@ with st.sidebar.container():
                 if t not in tags_input:
                     tags_input.append(t)
     else:
-        tags_input = st.multiselect(
-            "태그 (기존 종목 - 수정불가)",
-            options=get_all_tags(),
-            default=current_tags_for_ticker,
-            disabled=True,
-            key="ticker_tags_multiselect",
-        )
+        # 기존 종목: product_master tags만 표시 (multiselect session_state 오염 방지)
+        tags_input = list(current_tags_for_ticker)
+        tag_display = ", ".join(current_tags_for_ticker) if current_tags_for_ticker else "(없음)"
+        st.markdown(f"**태그** (기존 종목 · 수정불가): {tag_display}")
 
     # 새 종목 입력 모드와 기존 종목 선택 모드 구분
     if ticker_option == "새 종목 직접 입력":

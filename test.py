@@ -13,8 +13,8 @@ from utils import portfolio
 # print(prc)
 
 # 국내주식 현재가 조회
-# prc_kr_stock = ls_t1101.get_current("005930")
-# print(prc_kr_stock)
+prc_kr_stock = ls_t1101.get_current("000660")
+print(prc_kr_stock)
 
 # prc = ls_t1101.get_current_with_fallback("459580")
 # print(prc)
@@ -25,5 +25,5 @@ from utils import portfolio
 # print(prc)
 
 # 업종지수
-prc = ls_t1511.get_price_and_change_rate("001")
-print(prc)
+# prc = ls_t1511.get_price_and_change_rate("001")
+# print(prc)
