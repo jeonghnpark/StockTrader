@@ -8,9 +8,11 @@ from datetime import datetime, timedelta
 import requests
 from dotenv import load_dotenv
 
+from utils.logging_config import get_logger
+
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 APP_FUTURES_KEY_TEST = os.getenv("EBEST-OPEN-API-APP-KEY-FUTURES-TEST")
 APP_FUTURES_SECRET_TEST = os.getenv("EBEST-OPEN-API-SECRET-KEY-FUTURES-TEST")
@@ -73,8 +75,8 @@ def get_token_futures():
     url = "https://openapi.ls-sec.co.kr:8080/oauth2/token"
     headers = {"content-type": "application/x-www-form-urlencoded"}
     params = {
-        "appkey": APP_FUTURES_KEY_TEST,
-        "appsecretkey": APP_FUTURES_SECRET_TEST,
+        "appkey": EBEST_OPEN_API_APP_KEY,
+        "appsecretkey": EBEST_OPEN_API_SECRET_KEY,
         "grant_type": "client_credentials",
         "scope": "oob",
     }

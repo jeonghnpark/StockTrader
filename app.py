@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import date
 import os
+from utils.logging_config import setup_logging, read_log_file
 from utils.ls_t3521 import get_price_and_change_rate as get_overseas_macro_quote
 from utils.ls_t1511 import get_price_and_change_rate as get_domestic_index_quote
 from utils.portfolio import (
@@ -166,6 +167,12 @@ def _format_macro_price(price):
 
 # 페이지 기본 설정
 st.set_page_config(page_title="주식 포트폴리오 트래커", layout="wide")
+
+# 로깅 설정
+setup_logging()
+
+# 사이드바 - 로그 뷰어 제거
+# (메인 화면으로 이동)
 
 # 매매 내역 로드 (기존 종목/계좌 확인용)
 history_df = load_trade_history()
@@ -501,6 +508,13 @@ for col, item in zip(macro_cols, _get_macro_snapshot()):
             _format_macro_price(item["price"]),
             delta_text,
         )
+
+st.divider()
+
+# --- 로그 뷰어 (메인 화면) ---
+with st.expander("📋 **API 로그 뷰어** (최근 50줄)", expanded=False):
+    log_content = read_log_file(num_lines=50)
+    st.code(log_content, language="log")
 
 st.divider()
 

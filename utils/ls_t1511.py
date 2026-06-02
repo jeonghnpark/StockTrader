@@ -9,8 +9,9 @@ import requests
 from requests.exceptions import RequestException
 
 from utils.ls_auth import api_manager, get_token_futures
+from utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 TR = "t1511"
 BASE_URL = "https://openapi.ls-sec.co.kr:8080"
@@ -80,9 +81,11 @@ def get_current(upcode):
 
     api_manager.wait_for_next_call(TR, T1511_MIN_INTERVAL_SEC)
     try:
+        logger.debug(f"t1511 API 호출 시작: upcode={upcode}")
         res = requests.post(URL, headers=header, data=json.dumps(body), timeout=30)
         res.raise_for_status()
         res_json = res.json()
+        logger.debug(f"t1511 응답 수신: {upcode} rsp_cd={res_json.get('rsp_cd')}")
 
         if res_json.get("rsp_cd") != "00000":
             logger.warning(
@@ -99,6 +102,7 @@ def get_current(upcode):
             _CACHE[upcode] = (time.monotonic(), None)
             return None
 
+        logger.info(f"t1511 성공: {upcode}")
         _CACHE[upcode] = (time.monotonic(), out_block)
         return out_block
     except (RequestException, JSONDecodeError, ValueError) as exc:

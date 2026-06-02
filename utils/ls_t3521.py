@@ -8,7 +8,7 @@ from json.decoder import JSONDecodeError
 import requests
 from requests.exceptions import RequestException
 
-from utils.ls_auth import api_manager, get_token_foreign_stock
+from utils.ls_auth import api_manager, get_token_foreign_stock, get_token_futures
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ TR = "t3521"
 BASE_URL = "https://openapi.ls-sec.co.kr:8080"
 PATH = "stock/investinfo"
 URL = f"{BASE_URL}/{PATH}"
-T3521_MIN_INTERVAL_SEC = 1.1
+T3521_MIN_INTERVAL_SEC = 1.5
 _CACHE = {}  # kind:symbol -> (monotonic_ts, outblock dict | None)
 _CACHE_TTL_SEC = 30.0
 
@@ -69,7 +69,8 @@ def get_current(kind, symbol):
         if now - ts < _CACHE_TTL_SEC:
             return data
 
-    access_token = get_token_foreign_stock()
+    # access_token = get_token_foreign_stock()
+    access_token = get_token_futures()
     header = {
         "content-type": "application/json; charset=utf-8",
         "authorization": f"Bearer {access_token}",
@@ -87,9 +88,11 @@ def get_current(kind, symbol):
 
     api_manager.wait_for_next_call(TR, T3521_MIN_INTERVAL_SEC)
     try:
+        logger.debug(f"t3521 API 호출 시작: kind={kind}, symbol={symbol}")
         res = requests.post(URL, headers=header, data=json.dumps(body), timeout=30)
         res.raise_for_status()
         res_json = res.json()
+        logger.debug(f"t3521 응답 수신: {kind}/{symbol} rsp_cd={res_json.get('rsp_cd')}")
 
         if res_json.get("rsp_cd") != "00000":
             logger.warning(
@@ -107,6 +110,7 @@ def get_current(kind, symbol):
             _CACHE[cache_key] = (time.monotonic(), None)
             return None
 
+        logger.info(f"t3521 성공: {kind}/{symbol}")
         _CACHE[cache_key] = (time.monotonic(), out_block)
         return out_block
     except (RequestException, JSONDecodeError, ValueError) as exc:
