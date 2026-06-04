@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from datetime import datetime
 
 import pandas as pd
 import yfinance as yf
@@ -118,6 +119,9 @@ def load_trade_history():
         )
 
     df = pd.read_csv(CSV_FILE)
+    
+    # date 컬럼을 datetime으로 파싱
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
     changed = False
     # 기존 데이터에 currency 컬럼이 없는 경우 추가 (기본값 USD)
@@ -178,16 +182,48 @@ def add_trade(
     fx_krw_per_usd=None,
     exposure_currency=None,
     asset_class=None,
+    trade_time=None,
 ):
     df = load_trade_history()
     spot = get_exchange_rate()
     fx = _normalize_fx_for_row(currency, fx_krw_per_usd, spot)
     exp = _normalize_exposure_currency(exposure_currency)
     ac = _normalize_asset_class(asset_class or NEW_TRADE_DEFAULT_ASSET_CLASS)
+    
+    # date가 datetime 객체인지 date 객체인지 확인해서 datetime으로 통일
+    if isinstance(date, str):
+        datetime_obj = pd.to_datetime(date)
+    else:
+        datetime_obj = pd.to_datetime(date)
+    
+    # 시간 정보가 없으면 현재 시간 추가
+    if trade_time is None:
+        now = datetime.now()
+        datetime_obj = datetime_obj.replace(
+            hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond
+        )
+    else:
+        # trade_time이 제공되면 datetime 객체에서 시간 정보 추출해서 병합
+        if isinstance(trade_time, datetime):
+            datetime_obj = datetime_obj.replace(
+                hour=trade_time.hour,
+                minute=trade_time.minute,
+                second=trade_time.second,
+                microsecond=trade_time.microsecond
+            )
+        else:
+            time_obj = pd.to_datetime(trade_time).time()
+            datetime_obj = datetime_obj.replace(
+                hour=time_obj.hour,
+                minute=time_obj.minute,
+                second=time_obj.second,
+                microsecond=time_obj.microsecond
+            )
+    
     new_row = pd.DataFrame(
         [
             {
-                "date": date,
+                "date": datetime_obj,
                 "account": account,
                 "ticker": ticker.upper(),
                 "tradeType": tradeType,
@@ -216,6 +252,7 @@ def update_trade(
     fx_krw_per_usd=None,
     exposure_currency=None,
     asset_class=None,
+    trade_time=None,
 ):
     df = load_trade_history()
     if 0 <= index < len(df):
@@ -223,7 +260,47 @@ def update_trade(
         fx = _normalize_fx_for_row(currency, fx_krw_per_usd, spot)
         exp = _normalize_exposure_currency(exposure_currency)
         ac = _normalize_asset_class(asset_class)
-        df.loc[index, "date"] = date
+        
+        # date를 datetime으로 통일
+        if isinstance(date, str):
+            datetime_obj = pd.to_datetime(date)
+        else:
+            datetime_obj = pd.to_datetime(date)
+        
+        # 시간 정보 처리
+        if trade_time is None:
+            # 기존 시간 정보가 있으면 유지, 없으면 현재 시간
+            existing_datetime = pd.to_datetime(df.loc[index, "date"])
+            if pd.notna(existing_datetime) and existing_datetime.time() != datetime.min.time():
+                datetime_obj = datetime_obj.replace(
+                    hour=existing_datetime.hour,
+                    minute=existing_datetime.minute,
+                    second=existing_datetime.second,
+                    microsecond=existing_datetime.microsecond
+                )
+            else:
+                now = datetime.now()
+                datetime_obj = datetime_obj.replace(
+                    hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond
+                )
+        else:
+            if isinstance(trade_time, datetime):
+                datetime_obj = datetime_obj.replace(
+                    hour=trade_time.hour,
+                    minute=trade_time.minute,
+                    second=trade_time.second,
+                    microsecond=trade_time.microsecond
+                )
+            else:
+                time_obj = pd.to_datetime(trade_time).time()
+                datetime_obj = datetime_obj.replace(
+                    hour=time_obj.hour,
+                    minute=time_obj.minute,
+                    second=time_obj.second,
+                    microsecond=time_obj.microsecond
+                )
+        
+        df.loc[index, "date"] = datetime_obj
         df.loc[index, "account"] = account
         df.loc[index, "ticker"] = ticker.upper()
         df.loc[index, "tradeType"] = tradeType

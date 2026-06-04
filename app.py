@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import date
+from datetime import date, time, datetime
 import os
 from utils.logging_config import setup_logging, read_log_file
 from utils.ls_t3521 import get_price_and_change_rate as get_overseas_macro_quote
@@ -254,6 +254,18 @@ trade_form_fx_default = get_exchange_rate()
 # form 대신 container 사용 (엔터키 자동 제출 방지)
 with st.sidebar.container():
     trade_date = st.date_input("매매 일자", date.today())
+    
+    # 시간 입력 (시, 분, 초)
+    col_time_h, col_time_m, col_time_s = st.columns(3)
+    with col_time_h:
+        trade_hour = st.number_input("시(h)", min_value=0, max_value=23, value=9, step=1)
+    with col_time_m:
+        trade_minute = st.number_input("분(m)", min_value=0, max_value=59, value=0, step=1)
+    with col_time_s:
+        trade_second = st.number_input("초(s)", min_value=0, max_value=59, value=0, step=1)
+    
+    trade_time = time(hour=int(trade_hour), minute=int(trade_minute), second=int(trade_second))
+    
     trade_type = st.selectbox("매매 종류", ["매수", "매도"])
 
     # 태그 입력 필드 (새 종목 또는 기존 종목에 태그가 없는 경우)
@@ -482,6 +494,7 @@ if submit_button:
             fx_krw_per_usd=trade_fx_krw_per_usd,
             exposure_currency=exposure_currency,
             asset_class=asset_class,
+            trade_time=trade_time,
         )
         st.sidebar.success(f"[{account}] {ticker} {quantity}주 {trade_type} 추가 완료!")
         st.rerun()  # 앱 새로고침
@@ -1168,6 +1181,7 @@ if not df.empty:
                 "수량": "{:,.0f}",
                 "단가": "{:,.0f}",
                 fx_col: "{:,.2f}",
+                "매매일자": lambda x: pd.to_datetime(x).strftime("%Y-%m-%d %H:%M:%S") if pd.notna(x) else "",
             }
 
             st.divider()
@@ -1203,6 +1217,44 @@ if not df.empty:
                             pd.to_datetime(row_data["date"]),
                             key=f"edit_date_{edit_index}",
                         )
+                        # 기존 시간 정보 추출
+                        existing_datetime = pd.to_datetime(row_data["date"])
+                        existing_hour = existing_datetime.hour
+                        existing_minute = existing_datetime.minute
+                        existing_second = existing_datetime.second
+                        
+                        # 시간 입력 (시, 분, 초)
+                        col_eth, col_etm, col_ets = st.columns(3)
+                        with col_eth:
+                            edit_hour = st.number_input(
+                                "시(h)",
+                                min_value=0,
+                                max_value=23,
+                                value=existing_hour,
+                                step=1,
+                                key=f"edit_hour_{edit_index}",
+                            )
+                        with col_etm:
+                            edit_minute = st.number_input(
+                                "분(m)",
+                                min_value=0,
+                                max_value=59,
+                                value=existing_minute,
+                                step=1,
+                                key=f"edit_minute_{edit_index}",
+                            )
+                        with col_ets:
+                            edit_second = st.number_input(
+                                "초(s)",
+                                min_value=0,
+                                max_value=59,
+                                value=existing_second,
+                                step=1,
+                                key=f"edit_second_{edit_index}",
+                            )
+                        
+                        edit_time = time(hour=int(edit_hour), minute=int(edit_minute), second=int(edit_second))
+                        
                         edit_account = st.text_input(
                             "계좌명",
                             row_data["account"],
@@ -1309,6 +1361,7 @@ if not df.empty:
                                 fx_krw_per_usd=edit_fx_krw,
                                 exposure_currency=edit_exposure,
                                 asset_class=edit_asset_class,
+                                trade_time=edit_time,
                             ):
                                 st.success("성공적으로 수정되었습니다.")
                                 st.rerun()
