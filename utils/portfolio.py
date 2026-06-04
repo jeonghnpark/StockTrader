@@ -204,7 +204,18 @@ def add_trade(
         )
     else:
         # trade_time이 제공되면 datetime 객체에서 시간 정보 추출해서 병합
+        from datetime import time as time_type
+        
         if isinstance(trade_time, datetime):
+            # datetime 객체인 경우
+            datetime_obj = datetime_obj.replace(
+                hour=trade_time.hour,
+                minute=trade_time.minute,
+                second=trade_time.second,
+                microsecond=trade_time.microsecond
+            )
+        elif isinstance(trade_time, time_type):
+            # time 객체인 경우 (app.py에서 전달)
             datetime_obj = datetime_obj.replace(
                 hour=trade_time.hour,
                 minute=trade_time.minute,
@@ -212,6 +223,7 @@ def add_trade(
                 microsecond=trade_time.microsecond
             )
         else:
+            # 문자열인 경우
             time_obj = pd.to_datetime(trade_time).time()
             datetime_obj = datetime_obj.replace(
                 hour=time_obj.hour,
@@ -284,6 +296,8 @@ def update_trade(
                     hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond
                 )
         else:
+            from datetime import time as time_type
+            
             if isinstance(trade_time, datetime):
                 datetime_obj = datetime_obj.replace(
                     hour=trade_time.hour,
@@ -291,7 +305,16 @@ def update_trade(
                     second=trade_time.second,
                     microsecond=trade_time.microsecond
                 )
+            elif isinstance(trade_time, time_type):
+                # time 객체인 경우 (app.py에서 전달)
+                datetime_obj = datetime_obj.replace(
+                    hour=trade_time.hour,
+                    minute=trade_time.minute,
+                    second=trade_time.second,
+                    microsecond=trade_time.microsecond
+                )
             else:
+                # 문자열인 경우
                 time_obj = pd.to_datetime(trade_time).time()
                 datetime_obj = datetime_obj.replace(
                     hour=time_obj.hour,
@@ -909,3 +932,52 @@ def calculate_portfolio(account_filter=None, tag_filter=None):
     )
 
     return result_df
+
+
+def validate_trade(ticker, trade_type, quantity, account_filter=None):
+    """
+    거래 가능 여부를 검증한다.
+    
+    Args:
+        ticker: 종목 코드
+        trade_type: 매수(매수) 또는 매도(매도)
+        quantity: 거래 수량
+        account_filter: 계좌 필터 (None이면 전체)
+    
+    Returns:
+        (is_valid, error_message)
+        - is_valid: True면 거래 가능, False면 거래 불가
+        - error_message: 에러 메시지 (거래 가능하면 빈 문자열)
+    """
+    # 선물은 양방향 거래 가능 - 검증 필요 없음
+    if _is_future_ticker(ticker):
+        return True, ""
+    
+    # 주식/ETF: 매수는 항상 가능
+    if trade_type in ["Buy", "매수"]:
+        return True, ""
+    
+    # 매도인 경우 보유 수량 확인
+    if trade_type in ["Sell", "매도"]:
+        portfolio_df = calculate_portfolio(account_filter=account_filter)
+        
+        # 포트폴리오가 비어있거나 해당 종목이 없는 경우
+        if portfolio_df.empty:
+            return False, f"⚠️ [{ticker}] 보유 수량이 없어서 매도할 수 없습니다."
+        
+        # 해당 종목의 보유 수량 확인
+        ticker_rows = portfolio_df[portfolio_df["ticker"] == ticker]
+        if ticker_rows.empty:
+            return False, f"⚠️ [{ticker}] 보유 수량이 없어서 매도할 수 없습니다."
+        
+        holding_quantity = ticker_rows.iloc[0].get("currentQuantity", 0)
+        
+        if holding_quantity < quantity:
+            return (
+                False,
+                f"⚠️ [{ticker}] 매도 수량 초과!\n"
+                f"   보유: {holding_quantity:,.0f}주\n"
+                f"   시도: {quantity:,.0f}주"
+            )
+    
+    return True, ""

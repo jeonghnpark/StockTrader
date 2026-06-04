@@ -16,6 +16,7 @@ from utils.portfolio import (
     get_current_price,
     delete_trade,
     get_company_name,
+    validate_trade,
     EXPOSURE_CURRENCY_OPTIONS,
     ASSET_CLASS_OPTIONS,
     NEW_TRADE_DEFAULT_ASSET_CLASS,
@@ -255,14 +256,20 @@ trade_form_fx_default = get_exchange_rate()
 with st.sidebar.container():
     trade_date = st.date_input("매매 일자", date.today())
     
-    # 시간 입력 (시, 분, 초)
+    # 현재 시간 가져오기
+    now = datetime.now()
+    current_hour = now.hour
+    current_minute = now.minute
+    current_second = now.second
+    
+    # 시간 입력 (시, 분, 초) - 현재 시간 기본값
     col_time_h, col_time_m, col_time_s = st.columns(3)
     with col_time_h:
-        trade_hour = st.number_input("시(h)", min_value=0, max_value=23, value=9, step=1)
+        trade_hour = st.number_input("시(h)", min_value=0, max_value=23, value=current_hour, step=1)
     with col_time_m:
-        trade_minute = st.number_input("분(m)", min_value=0, max_value=59, value=0, step=1)
+        trade_minute = st.number_input("분(m)", min_value=0, max_value=59, value=current_minute, step=1)
     with col_time_s:
-        trade_second = st.number_input("초(s)", min_value=0, max_value=59, value=0, step=1)
+        trade_second = st.number_input("초(s)", min_value=0, max_value=59, value=current_second, step=1)
     
     trade_time = time(hour=int(trade_hour), minute=int(trade_minute), second=int(trade_second))
     
@@ -460,6 +467,14 @@ if submit_button:
             error_messages.append("시장을 선택해주세요.")
         if multiplier <= 0.0:
             error_messages.append("거래승수는 0보다 커야 합니다.")
+
+    # 거래 가능성 검증 (선물 제외)
+    if not error_messages and ticker:
+        is_valid, validation_error = validate_trade(
+            ticker, trade_type, quantity, account_filter=account
+        )
+        if not is_valid:
+            error_messages.append(validation_error)
 
     if error_messages:
         error_text = "\n".join(f"• {msg}" for msg in error_messages)
