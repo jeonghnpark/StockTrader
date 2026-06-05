@@ -2,9 +2,9 @@
 
 ## 개요
 
-주식 포트폴리오를 실시간으로 관리하고 분석하는 웹 기반 도구입니다. 현재 운영 중입니다.
+주식과 선물 포트폴리오를 실시간으로 관리하고 분석하는 웹 기반 도구입니다. 현재 운영 중입니다.
 
-**서비스 링크**: [https://stocktrader-qtpmeqpsaycuukf2fjfyxd.streamlit.app/](https://stocktrader-qtpmeqpsaycuukf2fjfyxd.streamlit.app/)
+**서비스 링크**: [https://huggingface.co/spaces/parkjeonghn7/StockTrader)
 
 ## 주요 화면
 
